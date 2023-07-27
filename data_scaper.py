@@ -54,17 +54,3 @@ class DataScraper:
         # Check if the element is meant to target the current URL
         return element_page_target in ["any", url]
 
-    @staticmethod
-    def _load_responses(urls: list[str]) -> dict[str, Response]:
-        if not urls:
-            print("WARNING: No URLs found!")
-
-        responses = {}
-        for url in urls:
-            # Fetch the response for each URL
-            response = requests.get(url)
-            if response.status_code != 200:
-                raise Exception(f"Failed to load the URL: {url}")
-            responses[url] = response
-
-        return responses
