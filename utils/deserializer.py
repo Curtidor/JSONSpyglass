@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Type, Any
 
 
 class Deserializer:
@@ -35,7 +35,7 @@ class Deserializer:
     """
 
     @staticmethod
-    def deserialize(cls: Type, json_data: dict) -> Type:
+    def deserialize(cls: Any, json_data: dict) -> Type:
         """Deserialize JSON data into a Python class object.
 
         Args:
@@ -45,8 +45,11 @@ class Deserializer:
         Returns:
             Type: The class object with attributes updated based on the JSON data.
         """
+        if json_data is None:
+            return cls
+
         p_fields = [attr for attr in cls.__dict__ if
-                   not callable(getattr(cls, attr)) and not attr.startswith("__")]
+                    not callable(getattr(cls, attr)) and not attr.startswith("__")]
 
         for j_field in json_data:
             if j_field in p_fields:

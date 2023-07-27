@@ -2,6 +2,9 @@ import aiohttp
 import asyncio
 from typing import List, Tuple, Any, Generator
 
+# todo
+# add support for dynamic websites
+
 
 class ResponsesLoader:
     def __init__(self, urls: List[str]):

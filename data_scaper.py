@@ -1,7 +1,4 @@
-import requests
-
 from bs4 import BeautifulSoup
-from requests import Response
 
 from models.target_element import TargetElement
 from loaders.config_loader import ConfigLoader
@@ -27,7 +24,7 @@ class DataScraper:
             soup = BeautifulSoup(content, "html.parser")
             for target_element in self.target_elements:
                 # Check if the element is meant to target the current URL
-                if not self.is_target_page(target_element.target_page, url):
+                if not self.is_target_page(target_element.target_pages, url):
                     # Skip collecting data with this element on the current page
                     continue
                 data = self.collect_all_target_elements(url, target_element, soup)
@@ -50,7 +47,7 @@ class DataScraper:
         return results
 
     @staticmethod
-    def is_target_page(element_page_target: str, url: str) -> bool:
+    def is_target_page(element_target_pages: list[str], url: str) -> bool:
         # Check if the element is meant to target the current URL
-        return element_page_target in ["any", url]
+        return url in element_target_pages or element_target_pages.count('any')
 

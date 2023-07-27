@@ -2,10 +2,11 @@ from typing import Any
 
 
 class TargetElement:
-    def __init__(self, tag: str, target_page: str, element_id: int, attributes: dict = None):
+    def __init__(self, name, tag: str, target_pages: list[str], element_id: int, attributes: dict = None):
+        self.name = name
         self.tag = tag
         self.attributes = attributes if attributes is not None else {}
-        self.target_page = target_page
+        self.target_pages = target_pages
         self.element_id = element_id
 
     def add_attribute(self, attribute_name: str, attribute_value: Any) -> None:
@@ -21,14 +22,15 @@ class TargetElement:
 
         for element in raw_element_data:
             tag = element.get('tag', "")
-            target_page = element.get('target_page', 'any')
+            target_pages = element.get('target_pages', 'any')
             element_id = element.get('id', 'invalid_id')
 
             if element_id == 'invalid_id':
                 raise Exception(f"Invalid element, no id found: {element}")
 
             attributes = TargetElement.collect_attributes(element.get('attributes', []))
-            new_elements.append(TargetElement(tag, target_page, element_id, attributes))
+            element_name = element.get('name', 'no_ref_element')
+            new_elements.append(TargetElement(element_name, tag, target_pages, element_id, attributes))
 
         return new_elements
 

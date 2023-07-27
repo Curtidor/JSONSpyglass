@@ -3,7 +3,7 @@
   "elements": [
     {
       "name": "product_price",
-      "tag": "div",
+      "tag": "p",
       "attributes": [
         {
           "name": "class",
@@ -13,13 +13,28 @@
       "data_parsing": {
          "collect_text": true
       }
+    },
+     {
+      "name": "main_page_hrefs",
+      "tag": "a",
+      "attributes": [
+        {
+          "name": "href",
+          "value": "any"
+        }
+      ],
+      "data_parsing": {
+         "collect_attr_value": {
+           "attr_name": "href"
+         }
+      }
     }
   ],
   "page_navigator":
     {
       "allowed_domains": ["books.toscrape.com"],
       "sleep_time": 0.5,
-      "url_pattern": "catalogue\\/.*",
+      "url_pattern": "\\/catalogue\\/.*",
       "target_elements": ["product_price"]
     }
 }

@@ -1,5 +1,7 @@
 import json
 
+from utils.logger import Logger, LoggerLevel
+
 
 class ConfigLoader:
     def __init__(self, config_file_path: str):
@@ -21,7 +23,7 @@ class ConfigLoader:
         urls = self.config_data.get("target_urls", [])
 
         if not urls:
-            print(f"WARNING: No urls where found in config: {self.config_file_path}")
+            Logger.console_log(f"No urls where found in config: {self.config_file_path}", LoggerLevel.WARNING)
 
         return urls
 
@@ -29,7 +31,7 @@ class ConfigLoader:
         elements = self.config_data.get("elements", [])
 
         if not elements:
-            print(f"WARNING: No elements where found in config: {self.config_file_path}")
+            Logger.console_log(f"No elements where found in config: {self.config_file_path}", LoggerLevel.WARNING)
 
         return elements
 
@@ -64,6 +66,6 @@ class ConfigLoader:
         page_nav_data = self.config_data.get('page_navigator')
 
         if not page_nav_data:
-            print(f"WARNING: No page nav for config: {self.config_file_path}")
+            Logger.console_log(f"No page navigation data in config ({self.config_file_path})", LoggerLevel.INFO)
 
         return page_nav_data
