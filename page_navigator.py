@@ -1,6 +1,6 @@
 import re
 
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 from loaders.config_loader import ConfigLoader
 from utils.deserializer import Deserializer
@@ -10,7 +10,7 @@ from loaders.response_loader import ResponsesLoader
 class PageNavigator:
     def __init__(self, config: ConfigLoader):
         self.config = config
-        self.page_nav_data = self.config.get_raw_page_nav()
+        self.page_nav_data = self.config.get_raw_page_navigator_data()
 
         self.allowed_domains = []
         self.target_elements = []
@@ -23,24 +23,22 @@ class PageNavigator:
     def navigate(self, base_url: str, hrefs: list[str]) -> None:
         urls = []
         for href in hrefs:
-            if self.is_same_domain(base_url, href):
-                print(href)
+            if self.is_same_domain(base_url, href) and self.is_valid_href(href):
+                urls.append(urljoin(base_url, href))
 
         rl = ResponsesLoader(urls)
         rl.collect_responses()
-    def is_valid_url(self, url: str) -> bool:
-        # check if its valid domain and if there is no domain then we assume it's valid
-        domain_match = re.match(r'(?:https|http):\/\/([^\/]+)', url)
-        if domain_match and domain_match.group(0) not in self.allowed_domains:
-            return False
 
+        for response in rl.get_responses(included_errors=False):
+            pass
+            #print(response)
+
+    def is_valid_href(self, href: str) -> bool:
         # check if the urls path matches the specified pattern for valid url paths
-        url_path_match = re.match(self.url_pattern, url)
+        url_path_match = re.search(self.url_pattern, href)
         if url_path_match:
             return True
 
-        # this return is reached when it's a valid domain but url path that
-        # didn't match the pattern
         return False
 
     @staticmethod

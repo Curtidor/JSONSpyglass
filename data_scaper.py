@@ -16,7 +16,7 @@ class DataScraper:
         self.response_loader = ResponsesLoader(self.urls)
         self.response_loader.collect_responses()
 
-    def collect_data(self) -> list[ScrapedData]:
+    def collect_data(self) -> list[list[ScrapedData]]:
         results = []
 
         for url, content in self.response_loader.get_responses(included_errors=False):
@@ -28,7 +28,7 @@ class DataScraper:
                     # Skip collecting data with this element on the current page
                     continue
                 data = self.collect_all_target_elements(url, target_element, soup)
-                results += data
+                results.append(data)
 
         return results
 

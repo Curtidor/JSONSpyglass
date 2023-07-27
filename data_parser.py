@@ -9,7 +9,7 @@ from utils.logger import Logger, LoggerLevel
 
 
 class DataParser:
-    def __init__(self, config: ConfigLoader, result_data: list[ScrapedData]):
+    def __init__(self, config: ConfigLoader, result_data: list[list[ScrapedData]]):
         self.config = config
         self.result_data = result_data
 
@@ -20,31 +20,35 @@ class DataParser:
             print("WARNING: No data to parse")
             return []
 
-        for element, element_id in self.get_elements():
+        cleaned_data = []
+        for scraped_data, element_id in self.get_elements():
             parsing_data = self.config.get_data_parsing_options(element_id)
+            data_feed = self.config.get_data_feed_options(element_id)
 
-            if parsing_data.get("collect_text"):
-                cleaned_data.append(element.text)
-
-            elif parsing_data.get("remove_tags"):
-                cleaned_data.append(str(element.unwrap()))
-
-            collect_attr_data = parsing_data.get("collect_attr_value")
-            if collect_attr_data:
-                if collect_attr_data.get('attr_name'):
-                    name = collect_attr_data['attr_name']
-                    value = self.collect_attr_value(name, str(element.unwrap()))
-                    cleaned_data.append(value)
-                else:
-                    Logger.console_log(f'No attribute name found, missing {{"attr_name": "value"}}: FOUND => {collect_attr_data}', LoggerLevel.ERROR)
-
-        return cleaned_data
-
-    def get_elements(self) -> Generator[Tuple[PageElement, int], None, None]:
-        for scraped_data in self.result_data:
-            target_element_id = scraped_data.target_element_id
+            cleaned_data = []
             for element in scraped_data.get_elements():
-                yield element, target_element_id
+
+                if parsing_data.get("collect_text"):
+                    cleaned_data.append(element.text)
+
+                elif parsing_data.get("remove_tags"):
+                    cleaned_data.append(str(element.unwrap()))
+
+                collect_attr_data = parsing_data.get("collect_attr_value")
+                if collect_attr_data:
+                    if collect_attr_data.get('attr_name'):
+                        name = collect_attr_data['attr_name']
+                        value = self.collect_attr_value(name, str(element.unwrap()))
+                        cleaned_data.append(value)
+                    else:
+                        Logger.console_log(f'No attribute name found, missing {{"attr_name": "value"}}: FOUND => {collect_attr_data}', LoggerLevel.ERROR)
+
+            yield cleaned_data
+
+    def get_elements(self) -> Generator[Tuple[ScrapedData, int], None, None]:
+        for list_result_set in self.result_data:
+            for scraped_data in list_result_set:
+                yield scraped_data, scraped_data.target_element_id
 
     @staticmethod
     def collect_attr_value(attr_name, element_text: str):

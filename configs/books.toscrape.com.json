@@ -27,7 +27,13 @@
          "collect_attr_value": {
            "attr_name": "href"
          }
-      }
+      },
+       "data_feed": {
+         "feed_into": {
+           "class": "PageNavigator",
+           "field": "hrefs"
+         }
+       }
     }
   ],
   "page_navigator":
