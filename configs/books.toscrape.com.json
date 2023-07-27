@@ -1,0 +1,25 @@
+{
+  "target_urls": ["https://books.toscrape.com/"],
+  "elements": [
+    {
+      "name": "product_price",
+      "tag": "div",
+      "attributes": [
+        {
+          "name": "class",
+          "value": "price_color"
+        }
+      ],
+      "data_parsing": {
+         "collect_text": true
+      }
+    }
+  ],
+  "page_navigator":
+    {
+      "allowed_domains": ["books.toscrape.com"],
+      "sleep_time": 0.5,
+      "url_pattern": "catalogue\\/.*",
+      "target_elements": ["product_price"]
+    }
+}

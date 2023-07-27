@@ -1,0 +1,30 @@
+{
+  "target_urls": ["https://www.scrapethissite.com/pages/simple/",
+    "https://www.scrapethissite.com/pages/forms/"],
+  "elements": [
+    {
+      "tag": "h3",
+      "attributes": [
+        {
+          "name": "class",
+          "value": "country-name"
+        }
+      ],
+      "data_parsing": {
+         "collect_text": true
+      }
+    },
+    {
+      "tag": "tr",
+      "attributes": [
+        {
+          "name": "class",
+          "value": "team"
+        }
+        ],
+      "data_parsing": {
+        "collect_text": true
+      }
+    }
+  ]
+}
