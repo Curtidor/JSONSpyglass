@@ -1,25 +1,22 @@
+from typing import List
+
 from bs4 import BeautifulSoup
 
 from models.target_element import TargetElement
-from loaders.config_loader import ConfigLoader
-from loaders.response_loader import ResponsesLoader
 from models.scarped_data import ScrapedData
+from observables.observable_collection import ObservableCollection
 
 
 class DataScraper:
-    def __init__(self, config: ConfigLoader, target_elements: list[TargetElement]):
-        self.config = config
-        self.urls = self.config.get_target_urls()
+    def __init__(self, target_elements: list[TargetElement]):
+        self.target_elements: list[TargetElement] = target_elements
 
-        self.target_elements = target_elements
+        ObservableCollection.add_observer_to_target("responses", self.collect_data)
 
-        self.response_loader = ResponsesLoader(self.urls)
-        self.response_loader.collect_responses()
-
-    def collect_data(self) -> list[list[ScrapedData]]:
+    def collect_data(self, response: dict) -> List[List[ScrapedData]]:
         results = []
 
-        for url, content in self.response_loader.get_responses(included_errors=False):
+        for url, content in response.items():
             # Parse the HTML content of the response
             soup = BeautifulSoup(content, "html.parser")
             for target_element in self.target_elements:
@@ -29,7 +26,7 @@ class DataScraper:
                     continue
                 data = self.collect_all_target_elements(url, target_element, soup)
                 results.append(data)
-
+        print(results)
         return results
 
     @staticmethod
@@ -50,4 +47,3 @@ class DataScraper:
     def is_target_page(element_target_pages: list[str], url: str) -> bool:
         # Check if the element is meant to target the current URL
         return url in element_target_pages or element_target_pages.count('any')
-

@@ -10,30 +10,10 @@
           "value": "price_color"
         }
       ],
+      "page_navigator": "global",
       "data_parsing": {
          "collect_text": true
       }
-    },
-     {
-      "name": "main_page_hrefs",
-      "tag": "a",
-      "attributes": [
-        {
-          "name": "href",
-          "value": "any"
-        }
-      ],
-      "data_parsing": {
-         "collect_attr_value": {
-           "attr_name": "href"
-         }
-      },
-       "data_feed": {
-         "feed_into": {
-           "class": "PageNavigator",
-           "field": "hrefs"
-         }
-       }
     }
   ],
   "page_navigator":

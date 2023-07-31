@@ -1,8 +1,6 @@
 import re
 from typing import Generator, Tuple
 
-from bs4 import PageElement
-
 from loaders.config_loader import ConfigLoader
 from models.scarped_data import ScrapedData
 from utils.logger import Logger, LoggerLevel
@@ -14,16 +12,12 @@ class DataParser:
         self.result_data = result_data
 
     def parse_data(self) -> list[str]:
-        cleaned_data = []
-
         if not self.result_data:
             print("WARNING: No data to parse")
             return []
 
-        cleaned_data = []
         for scraped_data, element_id in self.get_elements():
             parsing_data = self.config.get_data_parsing_options(element_id)
-            data_feed = self.config.get_data_feed_options(element_id)
 
             cleaned_data = []
             for element in scraped_data.get_elements():

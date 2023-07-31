@@ -62,17 +62,26 @@ class ConfigLoader:
         # no data parsing options where found
         return {}
 
-    def get_data_feed_options(self, element_id) -> dict:
+    def has_page_navigator(self) -> bool:
         elements = self.get_raw_target_elements()
 
         for element in elements:
-            if element.get("id") != element_id:
+            if element.get('page_navigator'):
+                return True
+
+        return self.config_data.get('page_navigator') is not None
+
+    def get_raw_page_navigator_data(self, element_id) -> dict:
+        elements = self.get_raw_target_elements()
+
+        for element in elements:
+            if element.get('page_navigator') != element_id:
                 continue
-            return element.get('data_feed')
+            return element.get('page_navigator')
 
         return {}
 
-    def get_raw_page_navigator_data(self) -> dict:
+    def get_raw_global_page_navigator_data(self) -> dict:
         page_nav_data = self.config_data.get('page_navigator')
 
         if not page_nav_data:

@@ -1,16 +1,14 @@
 import re
 
+from typing import Generator
 from urllib.parse import urlparse, urljoin
 
-from loaders.config_loader import ConfigLoader
 from utils.deserializer import Deserializer
 from loaders.response_loader import ResponsesLoader
 
 
 class PageNavigator:
-    def __init__(self, config: ConfigLoader):
-        self.config = config
-        self.page_nav_data = self.config.get_raw_page_navigator_data()
+    def __init__(self, page_navigator_json: dict):
 
         self.allowed_domains = []
         self.target_elements = []
@@ -18,12 +16,12 @@ class PageNavigator:
         self.sleep_time = 0
         self.max_depth = 5
 
-        Deserializer.deserialize(self, self.page_nav_data)
+        Deserializer.deserialize(self, page_navigator_json)
 
     def navigate(self, base_url: str, hrefs: list[str]) -> None:
         urls = []
         for href in hrefs:
-            if self.is_same_domain(base_url, href) and self.is_valid_href(href):
+            if self.is_same_domain(base_url, href) and self.is_valid_href(self.url_pattern, href):
                 urls.append(urljoin(base_url, href))
 
         rl = ResponsesLoader(urls)
@@ -33,9 +31,14 @@ class PageNavigator:
             pass
             #print(response)
 
-    def is_valid_href(self, href: str) -> bool:
+    @staticmethod
+    def formate_urls(base_url: str, hrefs: str) -> Generator[str, None, None]:
+        for href in hrefs:
+            yield urljoin(base_url, href)
+    @staticmethod
+    def is_valid_href(url_pattern: str, href: str) -> bool:
         # check if the urls path matches the specified pattern for valid url paths
-        url_path_match = re.search(self.url_pattern, href)
+        url_path_match = re.search(url_pattern, href)
         if url_path_match:
             return True
 

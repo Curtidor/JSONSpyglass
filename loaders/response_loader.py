@@ -1,48 +1,68 @@
 import aiohttp
 import asyncio
-from typing import List, Tuple, Any, Generator
+from typing import List, Tuple, Generator
 
-# todo
-# add support for dynamic websites
+from aiohttp import ClientSession
+
+from utils.logger import Logger, LoggerLevel
+from observables.observable_collection import ObservableCollection
 
 
 class ResponsesLoader:
-    def __init__(self, urls: List[str]):
-        self._urls = urls
-        self._responses = {}
+    _hooks = {'response': Logger.console_log}
+    _responses = ObservableCollection("responses")
+    _urls = []
 
     @staticmethod
-    async def fetch_url(session, url) -> tuple[Any, Any]:
-        async with session.get(url) as response:
-            return url, await response.text()
+    async def _apply_hooks(url: str, response: aiohttp.ClientResponse) -> Tuple[str, str]:
+        content = await response.text()
 
-    async def fetch_multiple_urls(self) -> None:
+        response_hook = ResponsesLoader._hooks.get('response')
+        if response_hook:
+            response_hook(f"Received response from {url}", LoggerLevel.INFO, include_time=True)
+
+        return url, content
+
+    @staticmethod
+    async def fetch_url(session: ClientSession, url: str) -> Tuple[str, str]:
+        async with session.get(url) as response:
+            ResponsesLoader._urls.remove(url)
+            return await ResponsesLoader._apply_hooks(url, response)
+
+    @staticmethod
+    async def fetch_multiple_urls() -> None:
         async with aiohttp.ClientSession() as session:
-            tasks = [self.fetch_url(session, url) for url in self._urls]
+            tasks = [ResponsesLoader.fetch_url(session, url) for url in ResponsesLoader._urls]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             for result in results:
                 if isinstance(result, Exception):
-                    print(f"ERROR: {result}")
-                    self._add_error(f"ERROR: {result}")
+                    Logger.console_log(f'{result}', LoggerLevel.WARNING)
+                    ResponsesLoader._add_error(f"ERROR: {result}")
                 else:
                     url, content = result
-                    self._responses[url] = content
+                    ResponsesLoader._responses.append({url: content})
 
-    def _add_error(self, error: str) -> None:
-        if self._responses.get("ERROR") is None:
-            self._responses.update({"ERROR": []})
+    @staticmethod
+    def _add_error(error: str) -> None:
+        if ResponsesLoader._responses[0].get("ERROR") is None:
+            ResponsesLoader._responses.insert(0, {"ERROR": []})
 
-        self._responses["ERROR"].append(error)
+        ResponsesLoader._responses[0]["ERROR"].append(error)
 
-    def collect_responses(self) -> dict:
-        self._responses.clear()
+    @staticmethod
+    def collect_responses() -> ObservableCollection:
+        asyncio.run(ResponsesLoader.fetch_multiple_urls())
+        return ResponsesLoader._responses
 
-        asyncio.run(self.fetch_multiple_urls())
-        return self._responses
+    @staticmethod
+    def get_responses(included_errors: bool = False) -> Generator[Tuple[str, str], None, None]:
+        for response in ResponsesLoader._responses:
+            for url, content in response.items():
+                if url.startswith("ERROR") and not included_errors:
+                    continue
+                yield url, content
 
-    def get_responses(self, included_errors: bool = False) -> Generator[Tuple[str, str], None, None]:
-        for url, content in self._responses.items():
-            if url.startswith("ERROR") and not included_errors:
-                continue
-            yield url, content
+    @staticmethod
+    def add_urls(urls: List[str]):
+        ResponsesLoader._urls += urls
