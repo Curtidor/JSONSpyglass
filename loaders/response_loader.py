@@ -5,12 +5,12 @@ from typing import List, Tuple, Generator
 from aiohttp import ClientSession
 
 from utils.logger import Logger, LoggerLevel
-from observables.observable_collection import ObservableCollection
+from observables.observable_list import ObservableList
 
 
 class ResponsesLoader:
     _hooks = {'response': Logger.console_log}
-    _responses = ObservableCollection("responses")
+    _responses = ObservableList("responses")
     _urls = []
 
     @staticmethod
@@ -51,7 +51,7 @@ class ResponsesLoader:
         ResponsesLoader._responses[0]["ERROR"].append(error)
 
     @staticmethod
-    def collect_responses() -> ObservableCollection:
+    def collect_responses() -> ObservableList:
         asyncio.run(ResponsesLoader.fetch_multiple_urls())
         return ResponsesLoader._responses
 

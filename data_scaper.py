@@ -4,14 +4,14 @@ from bs4 import BeautifulSoup
 
 from models.target_element import TargetElement
 from models.scarped_data import ScrapedData
-from observables.observable_collection import ObservableCollection
+from observables.observable_list import ObservableList
 
 
 class DataScraper:
     def __init__(self, target_elements: list[TargetElement]):
         self.target_elements: list[TargetElement] = target_elements
 
-        ObservableCollection.add_observer_to_target("responses", self.collect_data)
+        ObservableList.add_observer_to_target("responses", self.collect_data)
 
     def collect_data(self, response: dict) -> List[List[ScrapedData]]:
         results = []
