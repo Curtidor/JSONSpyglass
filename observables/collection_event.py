@@ -10,6 +10,9 @@ class CollectionEventType(Enum):
     SET = 'set'
     DELETE = 'delete'
     CLEAR = 'clear'
+    UPDATE = 'update'
+    POP = 'pop'
+    POPITEM = 'pop_item'
 
 
 class CollectionEvent:

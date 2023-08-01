@@ -1,3 +1,4 @@
+import functools
 import time
 import threading
 import weakref
@@ -71,30 +72,30 @@ class ObservableCollection:
             bool: True if the observer was successfully added to the specified collection, False otherwise.
         """
         if collection_type is not None:
-            collection = ObservableCollection._is_name_in_collection_data(
+            collection = ObservableCollection._try_get_collection(
                 ObservableCollection._observable_collections.get(collection_type),
                 collection_name)
-
-            if collection:
+            if collection is not None:
                 collection.add_observer(callback)
                 return True
-            else:
-                return False
 
-        for collection_type in ObservableCollection._observable_collections:
-            for _, collection_ref in ObservableCollection._observable_collections[collection_type].items():
-                collection = collection_ref()
-                if collection_name != collection.name:
-                    continue
-                collection.add_observer(callback)
-                return True
+        for c_type in ObservableCollection._observable_collections:
+            collection = ObservableCollection._try_get_collection(
+                ObservableCollection._observable_collections[c_type],
+                collection_name
+            )
+            if collection is None:
+                continue
+
+            collection.add_observer(callback)
+            return True
 
         Logger.console_log(f"No observable collection was found by the name: [{collection_name}] "
                            f"Callback: [{callback.__name__}]", LoggerLevel.WARNING)
         return False
 
     @staticmethod
-    def _is_name_in_collection_data(collection_data: Dict[str, weakref.ref], name: str) -> 'ObservableCollection':
+    def _try_get_collection(collection_data: Dict[str, weakref.ref], name: str) -> 'ObservableCollection':
         """
         Check if a specific collection name exists in the collection data.
 
@@ -128,6 +129,17 @@ class ObservableCollection:
         for observer in self._observers:
             observer(event, *args, **kwargs)
 
+    @staticmethod
+    def _memory_cleanup_decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            if not ObservableCollection._memory_cleaner_started:
+                ObservableCollection.start_memory_cleanup_thread()
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    @_memory_cleanup_decorator
     def _register_collection_name(self):
         """
         Register the collection name and its weak reference in the dictionary.
@@ -156,6 +168,7 @@ class ObservableCollection:
 
         # Remove the keys from the dictionary
         for key in keys_to_remove:
+            Logger.console_log(f"cleaned up dead reference: {key}", LoggerLevel.INFO)
             collection_data.pop(key)
 
     @staticmethod

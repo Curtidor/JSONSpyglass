@@ -1,22 +1,27 @@
-from typing import List
+from typing import List, Callable
 
 from bs4 import BeautifulSoup
 
 from models.target_element import TargetElement
 from models.scarped_data import ScrapedData
-from observables.observable_list import ObservableList
+from observables.observable_dict import ObservableDict, CollectionEvent, CollectionEventType
 
 
 class DataScraper:
-    def __init__(self, target_elements: list[TargetElement]):
+    def __init__(self, target_elements: list[TargetElement], parser_call_back: Callable):
         self.target_elements: list[TargetElement] = target_elements
+        self.parser_call_back = parser_call_back
 
-        ObservableList.add_observer_to_target("responses", self.collect_data)
+        ObservableDict.add_observer_to_target("responses", self.collect_data, collection_type=ObservableDict)
 
-    def collect_data(self, response: dict) -> List[List[ScrapedData]]:
+    def collect_data(self, event: CollectionEvent) -> List[List[ScrapedData]]:
         results = []
 
-        for url, content in response.items():
+        if event.event_type != CollectionEventType.UPDATE:
+            return []
+
+        responses = event.item
+        for url, content in responses.items():
             # Parse the HTML content of the response
             soup = BeautifulSoup(content, "html.parser")
             for target_element in self.target_elements:
@@ -26,8 +31,9 @@ class DataScraper:
                     continue
                 data = self.collect_all_target_elements(url, target_element, soup)
                 results.append(data)
-        print(results)
+        self.parser_call_back(results)
         return results
+
 
     @staticmethod
     def collect_all_target_elements(url: str, target_element: TargetElement, soup: BeautifulSoup) -> list[ScrapedData]:
