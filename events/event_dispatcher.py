@@ -55,7 +55,7 @@ class EventDispatcher:
         max_responders = event.max_responders if event.max_responders != -1 else len(listeners)
 
         async def run_listener(listener: EventListener):
-            if listener.callback not in self._busy_listeners:
+            if listener.callback not in self._busy_listeners or event.allow_busy_trigger:
                 self._busy_listeners.add(listener.callback)
                 await listener.callback(*args, **kwargs)
                 self._busy_listeners.remove(listener.callback)
