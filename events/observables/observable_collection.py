@@ -6,7 +6,6 @@ import weakref
 from typing import Dict, Type, Callable
 
 from utils.logger import Logger, LoggerLevel
-from events.collection_event import CollectionEvent
 from events.event_dispatcher import EventDispatcher
 
 
@@ -57,7 +56,7 @@ class ObservableCollection(EventDispatcher):
                 ObservableCollection._observable_collections.get(collection_type),
                 collection_name)
             if collection is not None:
-                collection.add_listener(callback)
+                collection.add_listener(collection_name, callback)
                 return True
 
         for c_type in ObservableCollection._observable_collections:
@@ -68,7 +67,7 @@ class ObservableCollection(EventDispatcher):
             if collection is None:
                 continue
 
-            collection.add_listener(callback)
+            collection.add_listener(collection_name, callback)
             return True
 
         Logger.console_log(f"No observable collection was found by the name: [{collection_name}] "
@@ -91,24 +90,6 @@ class ObservableCollection(EventDispatcher):
             if collection_name == name:
                 return collection_ref()
         return None
-
-    def trigger(self, event: CollectionEvent, *args, **kwargs) -> None:
-        """
-        Notify all registered observers with the given event and optional arguments.
-
-        This method iterates over all registered observers and calls their respective callback functions
-        with the provided event and any additional arguments passed as *args and **kwargs.
-
-        Args:
-            event (CollectionEvent): The event to be sent to all observers.
-            *args: Optional positional arguments to be passed to the observers' callback functions.
-            **kwargs: Optional keyword arguments to be passed to the observers' callback functions.
-
-        Note:
-            The observers' callback functions must be designed to handle the provided event and optional arguments.
-        """
-        for observer in self._listeners:
-            observer.callback(event, *args, **kwargs)
 
     @staticmethod
     def _memory_cleanup_decorator(func: Callable):

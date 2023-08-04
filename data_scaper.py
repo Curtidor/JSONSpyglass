@@ -4,9 +4,10 @@ from queue import Queue
 
 from bs4 import BeautifulSoup
 
+from events.event import Event
 from models.target_element import TargetElement
 from models.scarped_data import ScrapedData
-from events.observables.observable_dict import ObservableDict, CollectionEvent, CollectionEventType
+from events.observables.observable_dict import ObservableDict, CollectionEventType
 from events.event_dispatcher import EventDispatcher
 
 
@@ -21,11 +22,11 @@ class DataScraper:
         self.parser_call_back = parser_call_back
 
         ObservableDict.add_listener_to_target("responses", self._collect_response, collection_type=ObservableDict)
-        DataScraper._new_response_event.add_listener(self.collect_data)
+        DataScraper._new_response_event.add_listener("LOL", self.collect_data)
 
-    def collect_data(self, event_response) -> List[List[ScrapedData]]:
+    def collect_data(self, event: Event) -> List[List[ScrapedData]]:
         results = []
-        print(event_response)
+        print(event.event_type)
         try:
             response = DataScraper._responses.get(block=False)
             for url, content in response.items():
@@ -65,9 +66,9 @@ class DataScraper:
         return url in element_target_pages or element_target_pages.count('any')
 
     @staticmethod
-    def _collect_response(event: CollectionEvent) -> None:
+    def _collect_response(event: Event) -> None:
         if event.event_type != CollectionEventType.UPDATE:
             return
 
-        DataScraper._responses.put(event.item)
-        DataScraper._new_response_event.trigger("EVENT STUFF", max_responders=1)
+        DataScraper._responses.put(event.data)
+        DataScraper._new_response_event.trigger(Event("LOL", "Trigger", max_responders=1))
