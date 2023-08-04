@@ -1,8 +1,5 @@
-import queue
-from typing import List, Callable
-from queue import Queue
-
-from bs4 import BeautifulSoup
+from typing import List, Callable, Dict, Any
+from bs4 import BeautifulSoup, PageElement
 
 from events.event import Event
 from models.target_element import TargetElement
@@ -16,7 +13,7 @@ class DataScraper:
         self.target_elements: list[TargetElement] = target_elements
         self.parser_call_back = parser_call_back
 
-        self.hrefs = ObservableList("hrefs")
+        self.observable_hrefs = ObservableList("hrefs")
 
         # listen for new responses from the responses loader
         ObservableList.add_listener_to_target("responses", self.collect_data, collection_type=ObservableList)
@@ -25,23 +22,34 @@ class DataScraper:
         responses = event.data
 
         hrefs = []
+        results = []
         for response in responses:
-            results = []
-            for url, content in response.items():
-                # Parse the HTML content of the response
-                soup = BeautifulSoup(content, "html.parser")
-                hrefs.append(soup.find_all("a", href=True))
-                for target_element in self.target_elements:
-                    # Check if the element is meant to target the current URL
-                    if not self.is_target_page(target_element.target_pages, url):
-                        # Skip collecting data with this element on the current page
-                        continue
-                    data = self.collect_all_target_elements(url, target_element, soup)
-                    results.append(data)
+            page_data = self._process_response(response)
+            hrefs.extend(page_data['hrefs'])
+            results.append(page_data['results'])
 
-            self.parser_call_back(results)
+        self.parser_call_back(results)
+        # editing this list will trigger the page navigator
+        self.observable_hrefs.extend(hrefs)
 
-        self.hrefs.extend(hrefs)
+    def _process_response(self, response: Dict[str, str]) -> Dict[str, Any]:
+        hrefs = []
+        results = []
+        for url, content in response.items():
+            # Parse the HTML content of the response
+            soup = BeautifulSoup(content, "html.parser")
+            hrefs.extend(self._collect_hrefs(soup))
+            for target_element in self.target_elements:
+                if not self.is_target_page(target_element.target_pages, url):
+                    continue
+                data = self.collect_all_target_elements(url, target_element, soup)
+                results.append(data)
+
+        return {'hrefs': hrefs, 'results': results}
+
+    @staticmethod
+    def _collect_hrefs(soup: BeautifulSoup) -> List[PageElement]:
+        return [href.unwrap() for href in soup.find_all("a", href=True)]
 
     @staticmethod
     def collect_all_target_elements(url: str, target_element: TargetElement, soup: BeautifulSoup) -> list[ScrapedData]:

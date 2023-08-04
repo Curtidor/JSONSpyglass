@@ -1,6 +1,6 @@
 import aiohttp
 import asyncio
-from typing import List, Tuple, Generator
+from typing import List, Tuple
 
 from aiohttp import ClientSession
 
@@ -13,6 +13,7 @@ class ResponsesLoader:
 
     def __init__(self, responses_collection_name: str):
         self._responses = ObservableList(responses_collection_name)
+        self._errors: List[str] = []
         self._urls = []
 
     async def fetch_url(self, session: ClientSession, url: str) -> Tuple[str, str]:
@@ -39,15 +40,12 @@ class ResponsesLoader:
         asyncio.run(self.fetch_multiple_urls())
         return self._responses
 
-    def get_responses(self, included_errors: bool = False) -> Generator[Tuple[str, str], None, None]:
-        for response in self._responses:
-            for url, content in response.items():
-                if url.startswith("ERROR") and not included_errors:
-                    continue
-                yield url, content
-
     def add_urls(self, urls: List[str]):
         self._urls += urls
+
+    def show_errors(self) -> None:
+        for error in self._errors:
+            print(error)
 
     @staticmethod
     async def _apply_hooks(url: str, response: aiohttp.ClientResponse) -> Tuple[str, str]:
@@ -60,7 +58,4 @@ class ResponsesLoader:
         return url, content
 
     def _add_error(self, error: str) -> None:
-        if self._responses.get("ERROR") is None:
-            self._responses.update({"ERROR": []})
-
-        self._responses.get("ERROR").append(error)
+        self._errors.append(error)

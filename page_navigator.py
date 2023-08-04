@@ -9,7 +9,7 @@ from events.observables.observable_list import ObservableList
 
 class PageNavigator:
     def __init__(self, page_navigator_json: dict):
-
+        self.base_url = ""
         self.allowed_domains = []
         self.target_elements = []
         self.url_pattern = ""
@@ -17,10 +17,15 @@ class PageNavigator:
         self.max_depth = 5
 
         Deserializer.deserialize(self, page_navigator_json)
-        ObservableList.add_listener_to_target("hrefs", self.show_hfres, collection_type=ObservableList)
 
-    def show_hfres(self, event):
-        print("AHHHHHH", event.data)
+        # listen for new hrefs found by the data scaper
+        ObservableList.add_listener_to_target("hrefs", self.parse_hrefs, collection_type=ObservableList)
+
+    def parse_hrefs(self, event) -> None:
+        for href in event.data:
+            href_url = re.search(r'<a[^>]* href="([^"]*)"', str(href)).group(1)
+            if self.is_valid_href(self.url_pattern, href_url):
+                print(urljoin(self.base_url, href_url))
 
     @staticmethod
     def formate_urls(base_url: str, hrefs: str) -> Generator[str, None, None]:

@@ -10,7 +10,6 @@ def dparser(item):
     print(item)
 
 
-
 config = ConfigLoader('configs/books.toscrape.com.json')
 
 responses_loader = ResponsesLoader("responses")

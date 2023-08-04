@@ -20,7 +20,8 @@
     {
       "allowed_domains": ["books.toscrape.com"],
       "sleep_time": 0.5,
-      "url_pattern": "\\/catalogue\\/.*",
-      "target_elements": ["product_price"]
+      "url_pattern": "catalogue\\/(?!.*\\bcategory\\b).*",
+      "target_elements": ["product_price"],
+      "base_url": "https://books.toscrape.com/"
     }
 }
