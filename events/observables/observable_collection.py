@@ -143,7 +143,7 @@ class ObservableCollection(EventDispatcher):
             for collection_type in ObservableCollection._observable_collections:
                 collection_data = ObservableCollection._observable_collections[collection_type]
                 ObservableCollection._remove_dead_weakrefs(collection_data)
-            time.sleep(60)  # Sleep for 1 minute before the next cleanup
+            time.sleep(60)  # Sleep  for 1 minute before the next cleanup
 
     @staticmethod
     def _start_memory_cleanup_thread() -> None:
