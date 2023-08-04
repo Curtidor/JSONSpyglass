@@ -4,7 +4,7 @@ from typing import Generator
 from urllib.parse import urlparse, urljoin
 
 from utils.deserializer import Deserializer
-from loaders.response_loader import ResponsesLoader
+from events.observables.observable_list import ObservableList
 
 
 class PageNavigator:
@@ -17,24 +17,16 @@ class PageNavigator:
         self.max_depth = 5
 
         Deserializer.deserialize(self, page_navigator_json)
+        ObservableList.add_listener_to_target("hrefs", self.show_hfres, collection_type=ObservableList)
 
-    def navigate(self, base_url: str, hrefs: list[str]) -> None:
-        urls = []
-        for href in hrefs:
-            if self.is_same_domain(base_url, href) and self.is_valid_href(self.url_pattern, href):
-                urls.append(urljoin(base_url, href))
-
-        rl = ResponsesLoader(urls)
-        rl.collect_responses()
-
-        for response in rl.get_responses(included_errors=False):
-            pass
-            #print(response)
+    def show_hfres(self, event):
+        print("AHHHHHH", event.data)
 
     @staticmethod
     def formate_urls(base_url: str, hrefs: str) -> Generator[str, None, None]:
         for href in hrefs:
             yield urljoin(base_url, href)
+
     @staticmethod
     def is_valid_href(url_pattern: str, href: str) -> bool:
         # check if the urls path matches the specified pattern for valid url paths

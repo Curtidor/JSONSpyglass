@@ -6,17 +6,17 @@ from events.event_type import CollectionEventType
 
 
 class ObservableList(list, ObservableCollection):
-    def __init__(self, name: str = None):
+    def __init__(self, collection_name: str = None):
         """
         Initialize the ObservableList.
 
         Args:
-            name (str, optional): An optional identifier for the collection. Defaults to None.
+            collection_name (str, optional): An optional identifier for the collection. Defaults to None.
         """
         # Call __init__ from the first parent class, 'list'
         super().__init__()
         # Call __init__ from the second parent class, 'ObservableCollection'
-        ObservableCollection.__init__(self, name=name)
+        ObservableCollection.__init__(self, collection_name=collection_name)
 
     def append(self, item: Any) -> None:
         """
@@ -26,7 +26,7 @@ class ObservableList(list, ObservableCollection):
             item (Any): The item to be appended to the list.
         """
         super().append(item)
-        self.trigger(Event(self.name, CollectionEventType.APPEND, data=item))
+        self.trigger(Event(self.collection_name, CollectionEventType.APPEND, data=item))
 
     def extend(self, iterable: Iterable):
         """
@@ -36,6 +36,6 @@ class ObservableList(list, ObservableCollection):
             iterable (Iterable): An iterable of items to be appended to the list.
         """
         super().extend(iterable)
-        self.trigger(Event(self.name, CollectionEventType.EXTEND, data=iterable))
+        self.trigger(Event(self.collection_name, CollectionEventType.EXTEND, data=iterable))
 
 

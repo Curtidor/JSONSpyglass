@@ -17,21 +17,21 @@ class ObservableCollection(EventDispatcher):
     Observers can register callbacks to be notified when new items are appended to the collection.
 
     Attributes:
-        name (str): An optional identifier for the collection.
+        collection_name (str): An optional identifier for the collection.
     """
     _memory_cleaner_started = False
     _observable_collections: Dict[
         Type['ObservableCollection'], Dict[str, weakref.ref[Type['ObservableCollection']]]] = {}
 
-    def __init__(self, name: str = None):
+    def __init__(self, collection_name: str = None):
         """
         Initialize the ObservableCollection.
 
         Args:
-            name (str, optional): An optional identifier for the collection. Defaults to None.
+            collection_name (str, optional): An optional identifier for the collection. Defaults to objects id.
         """
         super(ObservableCollection, self).__init__()
-        self.name = name if name is not None else id(self)
+        self.collection_name = collection_name if collection_name is not None else id(self)
         self._register_collection_name()
 
     @staticmethod
@@ -110,22 +110,22 @@ class ObservableCollection(EventDispatcher):
         If the collection name is already registered in the dictionary, it logs an error message.
         """
         # if the collection was not given a name don't register it for look up
-        if self.name == id(self):
+        if self.collection_name == id(self):
             return
 
         collection_type = type(self)
         collection_data = ObservableCollection._observable_collections.get(collection_type)
         # if the name is already registered, log an error
-        if collection_data and self.name in collection_data:
-            Logger.console_log(f"Observable collection name already registered: [{self.name}] "
-                               f"Type: [{collection_type.__name__}]", LoggerLevel.ERROR)
+        if collection_data and self.collection_name in collection_data:
+            raise Exception(f"Observable collection name already registered: [{self.collection_name}] "
+                               f"Type: [{collection_type.__name__}]")
         # if the collection_type key is already in the dict, add a new mapping of the collection's name (key)
         # and its weak_ref (value)
         elif collection_type in ObservableCollection._observable_collections:
-            ObservableCollection._observable_collections[collection_type].update({self.name: weakref.ref(self)})
+            ObservableCollection._observable_collections[collection_type].update({self.collection_name: weakref.ref(self)})
         # if the collection type is not already in the dict, add it
         else:
-            ObservableCollection._observable_collections[collection_type] = {self.name: weakref.ref(self)}
+            ObservableCollection._observable_collections[collection_type] = {self.collection_name: weakref.ref(self)}
 
     @staticmethod
     def _remove_dead_weakrefs(collection_data):

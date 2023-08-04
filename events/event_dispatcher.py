@@ -35,8 +35,11 @@ class EventDispatcher:
         """
         Trigger the event and notify all registered listeners.
         """
+        if event.event_name not in self._listeners:
+            return
+
         responses = 0
-        for listener in self._listeners.get(event.event_name):
+        for listener in self._listeners[event.event_name]:
             if event.max_responders == -1 or responses < event.max_responders:
                 listener.callback(event, *args, **kwargs)
                 responses += 1

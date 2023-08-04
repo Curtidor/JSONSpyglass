@@ -5,14 +5,14 @@ from typing import List, Tuple, Generator
 from aiohttp import ClientSession
 
 from utils.logger import Logger, LoggerLevel
-from events.observables.observable_dict import ObservableDict
+from events.observables.observable_list import ObservableList
 
 
 class ResponsesLoader:
     _hooks = {'response': Logger.console_log}
 
     def __init__(self, responses_collection_name: str):
-        self._responses = ObservableDict(responses_collection_name)
+        self._responses = ObservableList(responses_collection_name)
         self._urls = []
 
     async def fetch_url(self, session: ClientSession, url: str) -> Tuple[str, str]:
@@ -21,6 +21,7 @@ class ResponsesLoader:
             return await self._apply_hooks(url, response)
 
     async def fetch_multiple_urls(self) -> None:
+        responses = []
         async with aiohttp.ClientSession() as session:
             tasks = [self.fetch_url(session, url) for url in self._urls]
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -31,9 +32,10 @@ class ResponsesLoader:
                     self._add_error(f"ERROR: {result}")
                 else:
                     url, content = result
-                    self._responses.update({url: content})
+                    responses.append({url: content})
+        self._responses.extend(responses)
 
-    def collect_responses(self) -> ObservableDict:
+    def collect_responses(self) -> ObservableList:
         asyncio.run(self.fetch_multiple_urls())
         return self._responses
 
