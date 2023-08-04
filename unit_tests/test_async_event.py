@@ -13,15 +13,15 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
 
         This test verifies that the EventDispatcher can correctly handle multiple asynchronous
         event listeners attached to the same event, even when some listeners are busy with time-consuming tasks.
-        We simulate a busy listener using asyncio.sleep(1) and make sure that other listeners still get executed.
+        We simulate a busy listener using asyncio.sleep(0.3) and make sure that other listeners still get executed.
         """
         # Initialize empty lists to store results from event listeners
         listener_one_results = []
         listener_two_results = []
 
         async def listener_one():
-            # Simulate some asynchronous work by waiting for 1 second
-            await asyncio.sleep(1)
+            # Simulate some asynchronous work by waiting for 0.3 seconds
+            await asyncio.sleep(0.3)
             listener_one_results.append("success")
 
         async def listener_two():
@@ -39,7 +39,7 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
             event_dispatcher.async_trigger(Event("test", "test_type"))
         )
 
-        # Assert that listener_one has been called only once (due to the 1-second delay),
+        # Assert that listener_one has been called only once (due to the 0.3-second delay),
         # and listener_two has been called twice (once for each event trigger).
         self.assertEqual(listener_one_results, ["success"])
         self.assertEqual(listener_two_results, ["success", "success"])
