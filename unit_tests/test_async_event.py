@@ -1,7 +1,9 @@
 import asyncio
 import unittest
 
-from events.event_dispatcher import EventDispatcher, Event, Priority
+from events.event_dispatcher import EventDispatcher
+from events.event import Event
+from events.event_listener import Priority
 
 
 class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
