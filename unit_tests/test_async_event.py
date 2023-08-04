@@ -77,9 +77,6 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(listener_one_results, ["success"])
         self.assertEqual(listener_two_results, [])
 
-    async def test_fail_push(self):
-        self.assertEqual(1, 2)
-
 
 if __name__ == "__main__":
     unittest.main()
