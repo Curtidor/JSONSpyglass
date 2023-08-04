@@ -1,5 +1,5 @@
-from observables.collection_event import CollectionEvent, CollectionEventType
-from observables.observable_collection import ObservableCollection
+from events.collection_event import CollectionEvent, CollectionEventType
+from events.observables.observable_collection import ObservableCollection
 
 
 class ObservableDict(dict, ObservableCollection):
@@ -18,7 +18,7 @@ class ObservableDict(dict, ObservableCollection):
             value: The value to be set.
         """
         super().__setitem__(key, value)
-        self._notify_observers(CollectionEvent(CollectionEventType.UPDATE, item=(key, value)))
+        self.trigger(CollectionEvent(CollectionEventType.UPDATE, item=(key, value)))
 
     def __delitem__(self, key):
         """
@@ -28,14 +28,14 @@ class ObservableDict(dict, ObservableCollection):
             key: The key of the item to be deleted.
         """
         super().__delitem__(key)
-        self._notify_observers(CollectionEvent(CollectionEventType.DELETE, item=key))
+        self.trigger(CollectionEvent(CollectionEventType.DELETE, item=key))
 
     def clear(self):
         """
         Clear all items from the dictionary and notify all registered observers.
         """
         super().clear()
-        self._notify_observers(CollectionEvent(CollectionEventType.CLEAR))
+        self.trigger(CollectionEvent(CollectionEventType.CLEAR))
 
     def pop(self, key, default=None):
         """
@@ -49,7 +49,7 @@ class ObservableDict(dict, ObservableCollection):
             The value for the given key if found, otherwise the default value.
         """
         value = super().pop(key, default)
-        self._notify_observers(CollectionEvent(CollectionEventType.POP, item=value))
+        self.trigger(CollectionEvent(CollectionEventType.POP, item=value))
         return value
 
     def popitem(self):
@@ -60,7 +60,7 @@ class ObservableDict(dict, ObservableCollection):
             An arbitrary (key, value) pair from the dictionary.
         """
         key, value = super().popitem()
-        self._notify_observers(CollectionEvent(CollectionEventType.POPITEM, item=(key, value)))
+        self.trigger(CollectionEvent(CollectionEventType.POPITEM, item=(key, value)))
         return key, value
 
     def setdefault(self, key, default=None):
@@ -76,7 +76,7 @@ class ObservableDict(dict, ObservableCollection):
             The value for the given key if found, otherwise the default value.
         """
         value = super().setdefault(key, default)
-        self._notify_observers(CollectionEvent(CollectionEventType.UPDATE, item=(key, value)))
+        self.trigger(CollectionEvent(CollectionEventType.UPDATE, item=(key, value)))
         return value
 
     def update(self, *args, **kwargs):
@@ -91,5 +91,5 @@ class ObservableDict(dict, ObservableCollection):
             **kwargs: Keyword arguments to update the dictionary.
         """
         super().update(*args, **kwargs)
-        self._notify_observers(CollectionEvent(CollectionEventType.UPDATE, item=dict(*args, **kwargs)))
+        self.trigger(CollectionEvent(CollectionEventType.UPDATE, item=dict(*args, **kwargs)))
 

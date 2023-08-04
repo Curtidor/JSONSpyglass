@@ -2,13 +2,15 @@ import functools
 import time
 import threading
 import weakref
-from typing import Dict, Type, List, Callable
+
+from typing import Dict, Type, Callable
 
 from utils.logger import Logger, LoggerLevel
-from observables.collection_event import CollectionEvent
+from events.collection_event import CollectionEvent
+from events.event_dispatcher import EventDispatcher
 
 
-class ObservableCollection:
+class ObservableCollection(EventDispatcher):
     """
     A base class for observable collections.
 
@@ -29,33 +31,12 @@ class ObservableCollection:
         Args:
             name (str, optional): An optional identifier for the collection. Defaults to None.
         """
+        super(ObservableCollection, self).__init__()
         self.name = name if name is not None else id(self)
-        self._observers: List[Callable] = []
-
         self._register_collection_name()
 
-    def add_observer(self, callback: Callable) -> None:
-        """
-        Register an observer to be notified when new items are appended to the collection.
-
-        Args:
-            callback (Callable): A callable function to be notified on collection updates.
-        """
-
-        if callback not in self._observers:
-            self._observers.append(callback)
-
-    def remove_observer(self, callback: Callable) -> None:
-        """
-        Remove an observer from the list of registered observers.
-
-        Args:
-            callback (Callable): The callable function to be removed from the list of observers.
-        """
-        self._observers.remove(callback)
-
     @staticmethod
-    def add_observer_to_target(collection_name: str, callback: Callable,
+    def add_listener_to_target(collection_name: str, callback: Callable,
                                collection_type: Type['ObservableCollection'] = None) -> bool:
         """
         Add an observer to a specific ObservableCollection instance based on its name.
@@ -76,7 +57,7 @@ class ObservableCollection:
                 ObservableCollection._observable_collections.get(collection_type),
                 collection_name)
             if collection is not None:
-                collection.add_observer(callback)
+                collection.add_listener(callback)
                 return True
 
         for c_type in ObservableCollection._observable_collections:
@@ -87,7 +68,7 @@ class ObservableCollection:
             if collection is None:
                 continue
 
-            collection.add_observer(callback)
+            collection.add_listener(callback)
             return True
 
         Logger.console_log(f"No observable collection was found by the name: [{collection_name}] "
@@ -111,7 +92,7 @@ class ObservableCollection:
                 return collection_ref()
         return None
 
-    def _notify_observers(self, event: CollectionEvent, *args, **kwargs) -> None:
+    def trigger(self, event: CollectionEvent, *args, **kwargs) -> None:
         """
         Notify all registered observers with the given event and optional arguments.
 
@@ -126,15 +107,15 @@ class ObservableCollection:
         Note:
             The observers' callback functions must be designed to handle the provided event and optional arguments.
         """
-        for observer in self._observers:
-            observer(event, *args, **kwargs)
+        for observer in self._listeners:
+            observer.callback(event, *args, **kwargs)
 
     @staticmethod
-    def _memory_cleanup_decorator(func):
+    def _memory_cleanup_decorator(func: Callable):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             if not ObservableCollection._memory_cleaner_started:
-                ObservableCollection.start_memory_cleanup_thread()
+                ObservableCollection._start_memory_cleanup_thread()
             return func(*args, **kwargs)
 
         return wrapper
@@ -147,6 +128,10 @@ class ObservableCollection:
         This method is called during the initialization of the ObservableCollection.
         If the collection name is already registered in the dictionary, it logs an error message.
         """
+        # if the collection was not given a name don't register it for look up
+        if self.name == id(self):
+            return
+
         collection_type = type(self)
         collection_data = ObservableCollection._observable_collections.get(collection_type)
         # if the name is already registered, log an error
@@ -180,7 +165,7 @@ class ObservableCollection:
             time.sleep(60)  # Sleep for 1 minute before the next cleanup
 
     @staticmethod
-    def start_memory_cleanup_thread() -> None:
+    def _start_memory_cleanup_thread() -> None:
         """
         Start the memory cleanup thread as a daemon thread.
         """

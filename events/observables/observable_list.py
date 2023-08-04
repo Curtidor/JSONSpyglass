@@ -1,7 +1,7 @@
 from typing import Any, Iterable
 
-from observables.collection_event import CollectionEvent, CollectionEventType
-from observables.observable_collection import ObservableCollection
+from events.collection_event import CollectionEvent, CollectionEventType
+from events.observables.observable_collection import ObservableCollection
 
 
 class ObservableList(list, ObservableCollection):
@@ -25,7 +25,7 @@ class ObservableList(list, ObservableCollection):
             item (Any): The item to be appended to the list.
         """
         super().append(item)
-        self._notify_observers(CollectionEvent(CollectionEventType.APPEND, item))
+        self.trigger(CollectionEvent(CollectionEventType.APPEND, item))
 
     def extend(self, iterable: Iterable):
         """
@@ -35,6 +35,6 @@ class ObservableList(list, ObservableCollection):
             iterable (Iterable): An iterable of items to be appended to the list.
         """
         super().extend(iterable)
-        self._notify_observers(CollectionEvent(CollectionEventType.EXTEND, iterable))
+        self.trigger(CollectionEvent(CollectionEventType.EXTEND, iterable))
 
 

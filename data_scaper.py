@@ -1,39 +1,49 @@
+import queue
 from typing import List, Callable
+from queue import Queue
 
 from bs4 import BeautifulSoup
 
 from models.target_element import TargetElement
 from models.scarped_data import ScrapedData
-from observables.observable_dict import ObservableDict, CollectionEvent, CollectionEventType
+from events.observables.observable_dict import ObservableDict, CollectionEvent, CollectionEventType
+from events.event_dispatcher import EventDispatcher
 
 
 class DataScraper:
+    # responses to be processed
+    _responses = Queue()
+    # event for when a new response is added
+    _new_response_event = EventDispatcher()
+
     def __init__(self, target_elements: list[TargetElement], parser_call_back: Callable):
         self.target_elements: list[TargetElement] = target_elements
         self.parser_call_back = parser_call_back
 
-        ObservableDict.add_observer_to_target("responses", self.collect_data, collection_type=ObservableDict)
+        ObservableDict.add_listener_to_target("responses", self._collect_response, collection_type=ObservableDict)
+        DataScraper._new_response_event.add_listener(self.collect_data)
 
-    def collect_data(self, event: CollectionEvent) -> List[List[ScrapedData]]:
+    def collect_data(self, event_response) -> List[List[ScrapedData]]:
         results = []
-
-        if event.event_type != CollectionEventType.UPDATE:
+        print(event_response)
+        try:
+            response = DataScraper._responses.get(block=False)
+            for url, content in response.items():
+                # Parse the HTML content of the response
+                soup = BeautifulSoup(content, "html.parser")
+                for target_element in self.target_elements:
+                    # Check if the element is meant to target the current URL
+                    if not self.is_target_page(target_element.target_pages, url):
+                        # Skip collecting data with this element on the current page
+                        continue
+                    data = self.collect_all_target_elements(url, target_element, soup)
+                    results.append(data)
+        except queue.Empty:
+            print("GG")
             return []
 
-        responses = event.item
-        for url, content in responses.items():
-            # Parse the HTML content of the response
-            soup = BeautifulSoup(content, "html.parser")
-            for target_element in self.target_elements:
-                # Check if the element is meant to target the current URL
-                if not self.is_target_page(target_element.target_pages, url):
-                    # Skip collecting data with this element on the current page
-                    continue
-                data = self.collect_all_target_elements(url, target_element, soup)
-                results.append(data)
         self.parser_call_back(results)
         return results
-
 
     @staticmethod
     def collect_all_target_elements(url: str, target_element: TargetElement, soup: BeautifulSoup) -> list[ScrapedData]:
@@ -53,3 +63,11 @@ class DataScraper:
     def is_target_page(element_target_pages: list[str], url: str) -> bool:
         # Check if the element is meant to target the current URL
         return url in element_target_pages or element_target_pages.count('any')
+
+    @staticmethod
+    def _collect_response(event: CollectionEvent) -> None:
+        if event.event_type != CollectionEventType.UPDATE:
+            return
+
+        DataScraper._responses.put(event.item)
+        DataScraper._new_response_event.trigger("EVENT STUFF", max_responders=1)
