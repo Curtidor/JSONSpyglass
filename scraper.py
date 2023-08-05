@@ -1,10 +1,10 @@
-from data_parser import DataParser
+from scraping.data_parser import DataParser
 from events.event_dispatcher import EventDispatcher
 from loaders.config_loader import ConfigLoader
 from loaders.response_loader import ResponsesLoader
 from models.target_element import TargetElement
-from data_scaper import DataScraper
-from page_navigator import PageNavigator
+from scraping.data_scaper import DataScraper
+from scraping.page_navigator import PageNavigator
 
 print("STARING..")
 
