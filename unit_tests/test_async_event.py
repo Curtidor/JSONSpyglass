@@ -27,7 +27,7 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
         async def listener_two():
             listener_two_results.append("success")
 
-        event_dispatcher = EventDispatcher()
+        event_dispatcher = EventDispatcher(debug_mode=True)
 
         # Add both listeners to the same event ("test") in the EventDispatcher
         event_dispatcher.add_listener("test", listener_one)

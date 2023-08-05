@@ -61,9 +61,10 @@ class EventDispatcher:
         max_responders = event.max_responders if event.max_responders != -1 else len(listeners)
 
         async def run_listener(listener: EventListener):
+            if self.debug_mode:
+                Logger.console_log(f"async calling: {listener.callback.__name__}", LoggerLevel.INFO, include_time=True)
+
             if listener.callback not in self._busy_listeners or event.allow_busy_trigger:
-                if self.debug_mode:
-                    Logger.console_log(f"async calling: {listener.callback.__name__}", LoggerLevel.INFO, include_time=True)
                 self._busy_listeners.add(listener.callback)
                 await listener.callback(*args, **kwargs)
                 self._busy_listeners.remove(listener.callback)
@@ -74,7 +75,7 @@ class EventDispatcher:
         listener = EventListener(callback=callback, priority=priority)
 
         # callback already register for the given event
-        if listener in self._listeners.get(event_name, []):
+        if listener.callback in [lstener for lstener in self._listeners.get(event_name, [])]:
             return
 
         if event_name in self._listeners:
