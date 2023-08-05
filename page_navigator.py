@@ -4,11 +4,11 @@ from typing import Generator
 from urllib.parse import urlparse, urljoin
 
 from utils.deserializer import Deserializer
-from events.observables.observable_list import ObservableList
+from events.event_dispatcher import EventDispatcher, Event
 
 
 class PageNavigator:
-    def __init__(self, page_navigator_json: dict):
+    def __init__(self, page_navigator_json: dict, event_dispatcher: EventDispatcher):
         self.base_url = ""
         self.allowed_domains = []
         self.target_elements = []
@@ -18,14 +18,18 @@ class PageNavigator:
 
         Deserializer.deserialize(self, page_navigator_json)
 
+        self.event_dispatcher = event_dispatcher
         # listen for new hrefs found by the data scaper
-        ObservableList.add_listener_to_target("hrefs", self.parse_hrefs, collection_type=ObservableList)
+        self.event_dispatcher.add_listener("new_hrefs", self.parse_hrefs)
 
     def parse_hrefs(self, event) -> None:
+        urls = []
         for href in event.data:
             href_url = re.search(r'<a[^>]* href="([^"]*)"', str(href)).group(1)
             if self.is_valid_href(self.url_pattern, href_url):
-                print(urljoin(self.base_url, href_url))
+                urls.append(urljoin(self.base_url, href_url))
+
+        self.event_dispatcher.trigger(Event("new_urls", "data_update", data=urls))
 
     @staticmethod
     def formate_urls(base_url: str, hrefs: str) -> Generator[str, None, None]:

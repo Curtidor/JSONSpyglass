@@ -1,22 +1,24 @@
 import re
-from typing import Generator, Tuple
+from typing import Generator, Tuple, List
 
 from loaders.config_loader import ConfigLoader
 from models.scarped_data import ScrapedData
 from utils.logger import Logger, LoggerLevel
+from events.event_dispatcher import EventDispatcher, Event
 
 
 class DataParser:
-    def __init__(self, config: ConfigLoader, result_data: list[list[ScrapedData]]):
+    def __init__(self, config: ConfigLoader, event_dispatcher: EventDispatcher):
         self.config = config
-        self.result_data = result_data
+        event_dispatcher.add_listener("scraped_data", self.parse_data)
 
-    def parse_data(self) -> list[str]:
-        if not self.result_data:
+    def parse_data(self, event: Event) -> None:
+        data_matrix = event.data
+        if not data_matrix:
             print("WARNING: No data to parse")
-            return []
+            return
 
-        for scraped_data, element_id in self.get_elements():
+        for scraped_data, element_id in self.get_elements(data_matrix):
             parsing_data = self.config.get_data_parsing_options(element_id)
 
             cleaned_data = []
@@ -36,11 +38,11 @@ class DataParser:
                         cleaned_data.append(value)
                     else:
                         Logger.console_log(f'No attribute name found, missing {{"attr_name": "value"}}: FOUND => {collect_attr_data}', LoggerLevel.ERROR)
+            print(f'{cleaned_data} \n {scraped_data.url}')
 
-            yield cleaned_data
-
-    def get_elements(self) -> Generator[Tuple[ScrapedData, int], None, None]:
-        for list_result_set in self.result_data:
+    @staticmethod
+    def get_elements(data_matrix: List[List[ScrapedData]]) -> Generator[Tuple[ScrapedData, int], None, None]:
+        for list_result_set in data_matrix:
             for scraped_data in list_result_set:
                 yield scraped_data, scraped_data.target_element_id
 

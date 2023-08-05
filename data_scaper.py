@@ -1,36 +1,37 @@
 from typing import List, Callable, Dict, Any
 from bs4 import BeautifulSoup, PageElement
 
-from events.event import Event
+from events.event_dispatcher import EventDispatcher, Event
 from models.target_element import TargetElement
 from models.scarped_data import ScrapedData
-from events.observables.observable_list import ObservableList
+from utils.logger import LoggerLevel, Logger
 
 
 class DataScraper:
     # responses to be processed
-    def __init__(self, target_elements: list[TargetElement], parser_call_back: Callable):
+    def __init__(self, target_elements: list[TargetElement], parser_call_back: Callable,event_dispatcher: EventDispatcher ):
         self.target_elements: list[TargetElement] = target_elements
         self.parser_call_back = parser_call_back
 
-        self.observable_hrefs = ObservableList("hrefs")
-
-        # listen for new responses from the responses loader
-        ObservableList.add_listener_to_target("responses", self.collect_data, collection_type=ObservableList)
+        self.event_dispatcher = event_dispatcher
+        self.event_dispatcher.add_listener("new_responses", self.collect_data)
 
     def collect_data(self, event: Event) -> None:
         responses = event.data
+        if not responses:
+            Logger.console_log("No data to scrape", LoggerLevel.WARNING)
 
         hrefs = []
         results = []
         for response in responses:
             page_data = self._process_response(response)
             hrefs.extend(page_data['hrefs'])
-            results.append(page_data['results'])
+            results.extend(page_data['results'])
 
-        self.parser_call_back(results)
+        # this event is listened for by the data parser
+        self.event_dispatcher.trigger(Event("scraped_data", "raw_data", data=results))
         # editing this list will trigger the page navigator
-        self.observable_hrefs.extend(hrefs)
+        self.event_dispatcher.trigger(Event("new_hrefs", "data_update", data=hrefs))
 
     def _process_response(self, response: Dict[str, str]) -> Dict[str, Any]:
         hrefs = []
