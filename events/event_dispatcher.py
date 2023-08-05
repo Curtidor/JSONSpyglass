@@ -42,11 +42,11 @@ class EventDispatcher:
 
         responses = 0
         for listener in self._listeners[event.event_name]:
-            if event.max_responders == -1 or responses < event.max_responders:
-                if self.debug_mode:
-                    Logger.console_log(f"calling: [{listener.callback.__name__}] from event: [{event.event_name}]",
-                                       LoggerLevel.INFO, include_time=True)
+            if self.debug_mode:
+                Logger.console_log(f"calling: [{listener.callback.__name__}] from event: [{event.event_name}]",
+                                   LoggerLevel.INFO, include_time=True)
 
+            if event.max_responders == -1 or responses < event.max_responders:
                 listener.callback(event, *args, **kwargs)
                 responses += 1
             # max responses reached exit the function

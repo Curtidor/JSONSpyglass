@@ -23,11 +23,12 @@ class PageNavigator:
         self.event_dispatcher.add_listener("new_hrefs", self.parse_hrefs)
 
     def parse_hrefs(self, event) -> None:
-        urls = []
+        # use a set to avoid any potential duplicate urls
+        urls = set()
         for href in event.data:
             href_url = re.search(r'<a[^>]* href="([^"]*)"', str(href)).group(1)
             if self.is_valid_href(self.url_pattern, href_url):
-                urls.append(urljoin(self.base_url, href_url))
+                urls.add(urljoin(self.base_url, href_url))
 
         self.event_dispatcher.trigger(Event("new_urls", "data_update", data=urls))
 

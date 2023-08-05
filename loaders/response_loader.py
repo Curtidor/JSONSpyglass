@@ -1,7 +1,7 @@
 import aiohttp
 import asyncio
-from typing import List, Tuple
 
+from typing import List, Tuple
 from aiohttp import ClientSession
 
 from events.event_dispatcher import EventDispatcher, Event
@@ -51,7 +51,6 @@ class ResponsesLoader:
         self._urls += event.data
         asyncio.run(self.fetch_multiple_urls())
         self.event_dispatcher.trigger(Event("new_responses", "loaded_responses", data=self.responses))
-
 
     def show_errors(self) -> None:
         for error in self._errors:

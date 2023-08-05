@@ -15,12 +15,10 @@ class DataParser:
     def parse_data(self, event: Event) -> None:
         data_matrix = event.data
         if not data_matrix:
-            print("WARNING: No data to parse")
             return
 
         for scraped_data, element_id in self.get_elements(data_matrix):
             parsing_data = self.config.get_data_parsing_options(element_id)
-
             cleaned_data = []
             for element in scraped_data.get_elements():
 
@@ -38,7 +36,7 @@ class DataParser:
                         cleaned_data.append(value)
                     else:
                         Logger.console_log(f'No attribute name found, missing {{"attr_name": "value"}}: FOUND => {collect_attr_data}', LoggerLevel.ERROR)
-            print(f'{cleaned_data} \n {scraped_data.url}')
+            print(f'{cleaned_data}: {scraped_data.url} DATA')
 
     @staticmethod
     def get_elements(data_matrix: List[List[ScrapedData]]) -> Generator[Tuple[ScrapedData, int], None, None]:

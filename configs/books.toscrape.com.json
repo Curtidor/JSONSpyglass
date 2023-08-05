@@ -14,6 +14,19 @@
       "data_parsing": {
          "collect_text": true
       }
+    },
+    {
+      "tag": "li",
+      "attributes": [
+        {
+          "name": "class",
+          "value": "active"
+        }
+      ],
+      "page_navigator": "global",
+      "data_parsing": {
+         "collect_text": true
+      }
     }
   ],
   "page_navigator":
@@ -21,7 +34,6 @@
       "allowed_domains": ["books.toscrape.com"],
       "sleep_time": 0.5,
       "url_pattern": "catalogue\\/(?!.*\\bcategory\\b).*",
-      "target_elements": ["product_price"],
       "base_url": "https://books.toscrape.com/"
     }
 }

@@ -8,11 +8,7 @@ from page_navigator import PageNavigator
 
 print("STARING..")
 
-event_dispatcher = EventDispatcher(debug_mode=True)
-
-
-def dparser(item):
-    print(item)
+event_dispatcher = EventDispatcher(debug_mode=False)
 
 
 config = ConfigLoader('configs/books.toscrape.com.json')
@@ -20,8 +16,8 @@ config = ConfigLoader('configs/books.toscrape.com.json')
 responses_loader = ResponsesLoader(config, event_dispatcher)
 
 target_elements = TargetElement.create_target_elements(config.get_raw_target_elements())
+ds = DataScraper(target_elements, event_dispatcher, 10)
 dp = DataParser(config, event_dispatcher)
-ds = DataScraper(target_elements, dparser, event_dispatcher)
 pg = PageNavigator(config.get_raw_global_page_navigator_data(), event_dispatcher)
 
 # this will start everything by getting the initial responses
