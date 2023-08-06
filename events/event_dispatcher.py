@@ -72,7 +72,7 @@ class EventDispatcher:
 
             if listener.callback not in self._busy_listeners or event.allow_busy_trigger:
                 self._busy_listeners.add(listener.callback)
-                await listener.callback(*args, **kwargs)
+                await listener.callback(event, *args, **kwargs)
                 self._busy_listeners.remove(listener.callback)
 
         await asyncio.gather(*[run_listener(listener) for listener in listeners[:max_responders]])
