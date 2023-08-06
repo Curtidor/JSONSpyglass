@@ -2,13 +2,14 @@ from typing import List, Dict
 from bs4 import BeautifulSoup, PageElement
 
 from events.event_dispatcher import EventDispatcher, Event
+from loaders.config_loader import ConfigLoader
 from models.target_element import TargetElement
 from models.scarped_data import ScrapedData
 from utils.logger import LoggerLevel, Logger
 
 
 class DataScraper:
-    def __init__(self, target_elements: list[TargetElement], event_dispatcher: EventDispatcher, max_empty_responses: int = 20):
+    def __init__(self, config: ConfigLoader, target_elements: list[TargetElement], event_dispatcher: EventDispatcher, max_empty_responses: int = 20):
         """
         Initialize the DataScraper class.
 
@@ -17,6 +18,7 @@ class DataScraper:
             event_dispatcher (EventDispatcher): An EventDispatcher instance used for event handling.
             max_empty_responses (int, optional): The maximum number of consecutive empty responses before exiting. Defaults to 20.
         """
+        self.config = config
         self.target_elements: list[TargetElement] = target_elements
         self._max_empty_responses = max_empty_responses
         self._empty_responses = 0
@@ -69,11 +71,17 @@ class DataScraper:
             # Parse the HTML content of the response
             soup = BeautifulSoup(content, "html.parser")
             hrefs.extend(self._collect_hrefs(soup))
+
+            # we collect the hrefs even if it's not scrape able we just don't collect data
+            if not self.config.is_target_url_scrapable(url):
+                continue
+
             for target_element in self.target_elements:
                 if not self.is_target_page(target_element.target_pages, url):
                     continue
                 data = self.collect_all_target_elements(url, target_element, soup)
                 results.append(data)
+
         return {'hrefs': hrefs, 'results': results}
 
     @staticmethod

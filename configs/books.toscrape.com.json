@@ -1,5 +1,5 @@
 {
-  "target_urls": ["https://books.toscrape.com/"],
+  "target_urls": [{"https://books.toscrape.com/": false}],
   "elements": [
     {
       "name": "product_price",
@@ -10,7 +10,6 @@
           "value": "price_color"
         }
       ],
-      "page_navigator": "global",
       "data_parsing": {
          "collect_text": true
       }
@@ -23,7 +22,6 @@
           "value": "active"
         }
       ],
-      "page_navigator": "global",
       "data_parsing": {
          "collect_text": true
       }

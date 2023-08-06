@@ -5,6 +5,7 @@ from urllib.parse import urlparse, urljoin
 
 from utils.deserializer import Deserializer
 from events.event_dispatcher import EventDispatcher, Event
+from models.target_url import TargetURL
 
 
 class PageNavigator:

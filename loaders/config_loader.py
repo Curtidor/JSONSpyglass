@@ -1,6 +1,8 @@
 import json
+from typing import Dict, List, Any
 
 from utils.logger import Logger, LoggerLevel
+from models.target_url import TargetURL
 
 
 class ConfigLoader:
@@ -10,6 +12,7 @@ class ConfigLoader:
         self.config_file_path = config_file_path
         self.config_data = self.load_config()
 
+        self._target_url_table = {}
         self._formate_config()
 
     def load_config(self) -> dict:
@@ -19,15 +22,28 @@ class ConfigLoader:
         except Exception as e:
             raise Exception(f"Failed to load the config file: {e}")
 
-    def get_target_urls(self) -> list:
-        urls = self.config_data.get("target_urls", [])
+    def get_target_urls(self) -> List[str]:
+        # target urls are stored in a list of dicts
+        # this code loops over each dict and gets the first key (the url)
+        urls = [next(iter(url)) for url in self.config_data.get("target_urls", [])]
 
         if not urls:
-            Logger.console_log(f"No urls where found in config: {self.config_file_path}", LoggerLevel.WARNING)
+            raise Exception(f"No urls where found in config: {self.config_file_path}, at least one is required")
 
         return urls
 
-    def get_raw_target_elements(self) -> list[dict]:
+    def is_target_url_scrapable(self, url: str) -> bool:
+        # if the table has been built return the value
+        if self._target_url_table:
+            return self._target_url_table.get(url, True)
+
+        # otherwise build the table then return the value
+        for url_data in self.config_data.get('target_urls', []):
+            self._target_url_table.update(url_data)
+
+        return self._target_url_table.get(url, True)
+
+    def get_raw_target_elements(self) -> List[Dict[Any, Any]]:
         elements = self.config_data.get("elements", [])
 
         if not elements:

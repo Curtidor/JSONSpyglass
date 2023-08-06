@@ -13,6 +13,7 @@ class EventDispatcher:
     def __init__(self, debug_mode: bool = False):
         self._listeners: Dict[str, List['EventListener']] = {}
         self.debug_mode = debug_mode
+        self._cancel_events = False
 
     def add_listener(self, event_name: str, listener: Callable, priority: Priority = Priority.NORMAL) -> None:
         """
@@ -37,7 +38,8 @@ class EventDispatcher:
         """
         Trigger the event and notify all registered listeners.
         """
-        if event.event_name not in self._listeners:
+
+        if event.event_name not in self._listeners or self._cancel_events:
             return
 
         responses = 0
@@ -57,6 +59,10 @@ class EventDispatcher:
         """
         Async trigger the event and notify all registered listeners.
         """
+
+        if self._cancel_events:
+            return
+
         listeners = self._listeners.get(event.event_name, [])
         max_responders = event.max_responders if event.max_responders != -1 else len(listeners)
 
@@ -70,6 +76,12 @@ class EventDispatcher:
                 self._busy_listeners.remove(listener.callback)
 
         await asyncio.gather(*[run_listener(listener) for listener in listeners[:max_responders]])
+
+    def disable_events(self):
+        self._cancel_events = True
+
+    def enable_events(self):
+        self._cancel_events = False
 
     def _register_event_listener(self, event_name: str, callback: Callable, priority: Priority) -> None:
         listener = EventListener(callback=callback, priority=priority)
@@ -87,5 +99,4 @@ class EventDispatcher:
         if event_name not in self._listeners:
             return
         self._listeners[event_name] = sorted(self._listeners[event_name], key=lambda event_listener: event_listener.priority.value)
-
 

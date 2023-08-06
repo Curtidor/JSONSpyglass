@@ -19,12 +19,12 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
         listener_one_results = []
         listener_two_results = []
 
-        async def listener_one():
+        async def listener_one(event):
             # Simulate some asynchronous work by waiting for 0.3 seconds
             await asyncio.sleep(0.3)
             listener_one_results.append("success")
 
-        async def listener_two():
+        async def listener_two(event):
             listener_two_results.append("success")
 
         event_dispatcher = EventDispatcher(debug_mode=True)
@@ -58,10 +58,10 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
         listener_two_results = []
 
         # Define two asynchronous event listeners (listener_one and listener_two)
-        async def listener_one():
+        async def listener_one(event):
             listener_one_results.append("success")
 
-        async def listener_two():
+        async def listener_two(event):
             listener_two_results.append("success")
 
         # Create an instance of the EventDispatcher

@@ -23,7 +23,6 @@ class ResponsesLoader:
 
     async def fetch_url(self, session: ClientSession, url: str) -> Tuple[str, str]:
         async with session.get(url) as response:
-            self._urls.remove(url)
             return await self._apply_hooks(url, response)
 
     async def fetch_multiple_urls(self) -> None:
@@ -41,6 +40,7 @@ class ResponsesLoader:
                     url, content = result
                     responses.append({url: content})
 
+        self._urls.clear()
         self.responses = responses
 
     def collect_responses(self) -> None:
