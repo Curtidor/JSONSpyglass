@@ -4,22 +4,25 @@ from bs4 import BeautifulSoup, PageElement
 from events.event_dispatcher import EventDispatcher, Event
 from loaders.config_loader import ConfigLoader
 from models.target_element import TargetElement
+from models.selector_element import SelectorElement
 from models.scarped_data import ScrapedData
 from utils.logger import LoggerLevel, Logger
+from factories.config_element_factory import ConfigElementFactory
 
 
 class DataScraper:
-    def __init__(self, config: ConfigLoader, target_elements: list[TargetElement], event_dispatcher: EventDispatcher, max_empty_responses: int = 20):
+    def __init__(self, config: ConfigLoader, elements: Dict[str, List[TargetElement | SelectorElement]], event_dispatcher: EventDispatcher, max_empty_responses: int = 20):
         """
         Initialize the DataScraper class.
 
         Args:
-            target_elements (list[TargetElement]): List of TargetElement instances representing the elements to scrape.
+            config (ConfigLoader): The configuration loader.
+            elements (dict): Dictionary containing lists of target or selector elements.
             event_dispatcher (EventDispatcher): An EventDispatcher instance used for event handling.
             max_empty_responses (int, optional): The maximum number of consecutive empty responses before exiting. Defaults to 20.
         """
         self.config = config
-        self.target_elements: list[TargetElement] = target_elements
+        self.elements = elements
         self._max_empty_responses = max_empty_responses
         self._empty_responses = 0
 
@@ -31,7 +34,7 @@ class DataScraper:
         Collect data from the responses obtained by the response loader.
 
         Args:
-            event (Event): The event triggered with the responses data.
+            event (Event): The event triggered with the responses' data.
         """
         responses = event.data
         if not responses:
@@ -41,7 +44,6 @@ class DataScraper:
                 return
             self._empty_responses += 1
 
-        # use a set to ensure there are no duplicate hrefs to avoid redundant requests
         hrefs = set()
         results = []
         for response in responses:
@@ -49,38 +51,35 @@ class DataScraper:
             [hrefs.add(href) for href in page_data['hrefs']]
             results.extend(page_data['results'])
 
-        # this event is listened for by the data parser
         self.event_dispatcher.trigger(Event("scraped_data", "raw_data", data=results))
-        # editing this list will trigger the page navigator
         self.event_dispatcher.trigger(Event("new_hrefs", "data_update", data=hrefs))
 
-    def _process_response(self, response: Dict[str, str]) -> dict[str, list[list[ScrapedData]] | set[PageElement]]:
+    def _process_response(self, response: Dict[str, str]) -> dict[str, list[ScrapedData] | list[PageElement]]:
         """
         Process the response data obtained from the response loader.
 
         Args:
-            response (Dict[str, str]): Dictionary containing URL and HTML content.
+            response (dict): Dictionary containing URL and HTML content.
 
         Returns:
-            Dict[str, Any]: A dictionary containing extracted hrefs and target element data.
+            dict: Dictionary containing extracted hrefs and target element data.
         """
-        # use a set to ensure there are no duplicate hrefs to avoid redundant requests
         hrefs = []
         results = []
         for url, content in response.items():
-            # Parse the HTML content of the response
             soup = BeautifulSoup(content, "html.parser")
             hrefs.extend(self._collect_hrefs(soup))
 
-            # we collect the hrefs even if it's not scrape able we just don't collect data
             if not self.config.is_target_url_scrapable(url):
                 continue
 
-            for target_element in self.target_elements:
-                if not self.is_target_page(target_element.target_pages, url):
-                    continue
-                data = self.collect_all_target_elements(url, target_element, soup)
-                results.append(data)
+            for element_type, element_data in self.elements.items():
+                for element in element_data:
+                    if element_type == ConfigElementFactory.ELEMENT_SELECTOR:
+                        data = self._collect_all_selector_elements(url, element, soup)
+                    else:
+                        data = self._collect_all_target_elements(url, element, soup)
+                    results.append(data)
 
         return {'hrefs': hrefs, 'results': results}
 
@@ -98,7 +97,7 @@ class DataScraper:
         return [href.unwrap() for href in soup.find_all("a", href=True)]
 
     @staticmethod
-    def collect_all_target_elements(url: str, target_element: TargetElement, soup: BeautifulSoup) -> list[ScrapedData]:
+    def _collect_all_target_elements(url: str, target_element: TargetElement, soup: BeautifulSoup) -> ScrapedData:
         """
         Collect data from all target elements specified by the TargetElement.
 
@@ -108,22 +107,27 @@ class DataScraper:
             soup (BeautifulSoup): The BeautifulSoup instance representing the parsed HTML content.
 
         Returns:
-            list[ScrapedData]: A list of ScrapedData instances containing the collected data.
+            ScrapedData: An instance containing the collected data.
         """
-        results = []
-        for attr_name, attr_value in target_element.attributes.items():
-            # Find all elements that match the target_element's tag and attributes
-            # unless attr_value contains (any) in which case we collect all data for the given tag
-            if attr_value.count('any'):
-                results.append(
-                    ScrapedData(url, soup.find_all(target_element.tag), target_element.element_id))
-            else:
-                results.append(
-                    ScrapedData(url, soup.find_all(target_element.tag, attr_value), target_element.element_id))
-        return results
+        return ScrapedData(url, soup.find_all(target_element.tag, attrs=target_element.attributes), target_element.element_id)
 
     @staticmethod
-    def is_target_page(element_target_pages: list[str], url: str) -> bool:
+    def _collect_all_selector_elements(url: str, selector_element: SelectorElement, soup: BeautifulSoup) -> ScrapedData:
+        """
+        Collect data from all selector elements specified by the SelectorElement.
+
+        Args:
+            url (str): The URL of the web page.
+            selector_element (SelectorElement): The SelectorElement instance representing the element to collect data from.
+            soup (BeautifulSoup): The BeautifulSoup instance representing the parsed HTML content.
+
+        Returns:
+            ScrapedData: An instance containing the collected data.
+        """
+        return ScrapedData(url, soup.select(selector_element.css_selector), selector_element.element_id)
+
+    @staticmethod
+    def _is_target_page(element_target_pages: list[str], url: str) -> bool:
         """
         Check if the element is meant to target the current URL.
 
@@ -134,5 +138,4 @@ class DataScraper:
         Returns:
             bool: True if the element targets the current URL, False otherwise.
         """
-        # Check if the element is meant to target the current URL
         return url in element_target_pages or element_target_pages.count('any')

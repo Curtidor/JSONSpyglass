@@ -2,36 +2,43 @@
   "target_urls": [{"https://books.toscrape.com/": false}],
   "elements": [
     {
-      "name": "product_price",
-      "tag": "p",
-      "attributes": [
-        {
-          "name": "class",
-          "value": "price_color"
-        }
-      ],
+      "name": "book price",
+      "css_selector": ".product_main p.price_color",
+
       "data_parsing": {
          "collect_text": true
       }
     },
     {
-      "tag": "li",
-      "attributes": [
-        {
-          "name": "class",
-          "value": "active"
-        }
-      ],
+      "name": "book name",
+      "css_selector": "h1",
+
       "data_parsing": {
          "collect_text": true
       }
     }
   ],
-  "page_navigator":
-    {
-      "allowed_domains": ["books.toscrape.com"],
-      "sleep_time": 0.5,
-      "url_pattern": "catalogue\\/(?!.*\\bcategory\\b).*",
-      "base_url": "https://books.toscrape.com/"
+  "page_navigator": {
+    "allowed_domains": ["books.toscrape.com"],
+    "sleep_time": 0.5,
+    "url_pattern": "catalogue\\/(?!.*\\bcategory\\b).*",
+    "base_url": "https://books.toscrape.com/"
+  },
+  "data_saving": {
+    "csv": {
+      "enabled": true,
+      "file_path": "output.csv",
+      "delimiter": ","
+    },
+    "database": {
+      "enabled": true,
+      "type": "mysql",
+      "host": "localhost",
+      "port": 3306,
+      "username": "your_username",
+      "password": "your_password",
+      "database_name": "your_database"
     }
+  },
+  "data_order": ["book name", "book price"]
 }

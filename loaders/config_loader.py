@@ -1,8 +1,7 @@
 import json
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple, Generator
 
 from utils.logger import Logger, LoggerLevel
-from models.target_url import TargetURL
 
 
 class ConfigLoader:
@@ -33,6 +32,22 @@ class ConfigLoader:
         return urls
 
     def is_target_url_scrapable(self, url: str) -> bool:
+        """Check if a target URL is scrapable based on the configuration.
+
+        This method checks whether a given URL is allowed for scraping, according to the configuration data
+        provided in the 'target_urls' section. The 'target_urls' configuration specifies which URLs are
+        considered scrapable and which are not based on the urls corresponding value.
+
+        Args:
+            url (str): The URL to be checked for scrapability.
+
+        Note:
+            If the url is not in the table, it is assumed to be scrapable, as this function only checks the
+            urls specified in the configuration file.
+
+        Returns:
+            bool: True if the URL is allowed for scraping, False otherwise.
+        """
         # if the table has been built return the value
         if self._target_url_table:
             return self._target_url_table.get(url, True)
@@ -43,24 +58,38 @@ class ConfigLoader:
 
         return self._target_url_table.get(url, True)
 
-    def get_raw_target_elements(self) -> List[Dict[Any, Any]]:
+    def get_raw_target_elements(self) -> Generator[Tuple[str, Dict[Any, Any]], None, None]:
+        """
+        Generator function to yield raw target elements or selectors from the configuration.
+
+        Yields:
+            Tuple[str, Dict[Any, Any]]: A tuple where the first element is 'target' or 'selector',
+                                       and the second element is the raw element configuration.
+        """
         elements = self.config_data.get("elements", [])
 
         if not elements:
-            Logger.console_log(f"No elements where found in config: {self.config_file_path}", LoggerLevel.WARNING)
+            raise ValueError(f"No elements were found in the file: {self.config_file_path}")
 
-        return elements
+        for element in elements:
+            if element.get('tag', ""):
+                element_type = "target"
+            elif element.get('css_selector', ""):
+                element_type = "selector"
+            else:
+                raise ValueError(f"Invalid element configuration: {element}")
+
+            yield element_type, element
 
     def _formate_config(self):
         index_id = 0
-        for element in self.get_raw_target_elements():
+        for _, element in self.get_raw_target_elements():
             if element.get("id"):
                 continue
             element["id"] = index_id
             index_id += 1
 
     def get_data_parsing_options(self, element_id: int) -> dict:
-        elements = self.get_raw_target_elements()
         options = self._parsing_options_cache.get(element_id)
 
         # if a cache value is found return it
@@ -68,12 +97,23 @@ class ConfigLoader:
             return options
 
         # else manually search for the element
-        for element in elements:
+        for _, element in self.get_raw_target_elements():
             if element.get("id") != element_id:
                 continue
-            # if the element is found cache the element then return it
-            self._parsing_options_cache.update({element_id: element.get('data_parsing')})
-            return element.get('data_parsing')
+
+            # get the data parsing options from the element
+            element_parsing_data = element.get('data_parsing', '')
+            # if there's no data parsing options inform the user
+            if not element_parsing_data:
+                Logger.console_log(
+                    f"element has no data parsing options specified, collect data will be ignored: {element}",
+                    LoggerLevel.WARNING)
+            # if there is data parsing options update the cache with its id and parsing options
+            else:
+                self._parsing_options_cache.update({element_id: element_parsing_data})
+
+            # return the elements data parsing data
+            return element_parsing_data
 
         # no data parsing options where found
         return {}
@@ -81,7 +121,7 @@ class ConfigLoader:
     def has_page_navigator(self) -> bool:
         elements = self.get_raw_target_elements()
 
-        for element in elements:
+        for _, element in elements:
             if element.get('page_navigator'):
                 return True
 
@@ -90,7 +130,7 @@ class ConfigLoader:
     def get_raw_page_navigator_data(self, element_id) -> dict:
         elements = self.get_raw_target_elements()
 
-        for element in elements:
+        for _, element in elements:
             if element.get('page_navigator') != element_id:
                 continue
             return element.get('page_navigator')
@@ -101,6 +141,6 @@ class ConfigLoader:
         page_nav_data = self.config_data.get('page_navigator')
 
         if not page_nav_data:
-            Logger.console_log(f"No page navigation data in config ({self.config_file_path})", LoggerLevel.INFO)
+            Logger.console_log(f"No page navigation data in config: {self.config_file_path}", LoggerLevel.WARNING)
 
         return page_nav_data

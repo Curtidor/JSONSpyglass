@@ -16,7 +16,6 @@ class DataParser:
         data_matrix = event.data
         if not data_matrix:
             return
-
         for scraped_data, element_id in self.get_elements(data_matrix):
             parsing_data = self.config.get_data_parsing_options(element_id)
             cleaned_data = []
@@ -39,10 +38,9 @@ class DataParser:
             print(f'{cleaned_data}: {scraped_data.url} DATA')
 
     @staticmethod
-    def get_elements(data_matrix: List[List[ScrapedData]]) -> Generator[Tuple[ScrapedData, int], None, None]:
-        for list_result_set in data_matrix:
-            for scraped_data in list_result_set:
-                yield scraped_data, scraped_data.target_element_id
+    def get_elements(data_matrix: List[ScrapedData]) -> Generator[Tuple[ScrapedData, int], None, None]:
+        for scraped_data in data_matrix:
+            yield scraped_data, scraped_data.target_element_id
 
     @staticmethod
     def collect_attr_value(attr_name, element_text: str):
