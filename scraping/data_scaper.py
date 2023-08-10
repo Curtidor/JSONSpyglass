@@ -70,12 +70,13 @@ class DataScraper:
             soup = BeautifulSoup(content, "html.parser")
             hrefs.extend(self._collect_hrefs(soup))
 
-            if not self.config.is_target_url_scrapable(url):
+            if self.config.only_scrape_sub_pages(url):
                 continue
 
             for element_type, element_data in self.elements.items():
                 for element in element_data:
                     if element_type == ConfigElementFactory.ELEMENT_SELECTOR:
+
                         data = self._collect_all_selector_elements(url, element, soup)
                     else:
                         data = self._collect_all_target_elements(url, element, soup)
@@ -94,7 +95,7 @@ class DataScraper:
         Returns:
             List[PageElement]: A list of PageElement instances representing the hrefs found in the HTML.
         """
-        return [href.unwrap() for href in soup.find_all("a", href=True)]
+        return [href['href'] for href in soup.find_all("a", href=True)]
 
     @staticmethod
     def _collect_all_target_elements(url: str, target_element: TargetElement, soup: BeautifulSoup) -> ScrapedData:

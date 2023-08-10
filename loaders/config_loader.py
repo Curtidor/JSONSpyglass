@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Dict, List, Any, Tuple, Generator
 
 from utils.logger import Logger, LoggerLevel
@@ -13,6 +14,7 @@ class ConfigLoader:
 
         self._target_url_table = {}
         self._formate_config()
+        self._build_target_url_table()
 
     def load_config(self) -> dict:
         try:
@@ -24,19 +26,19 @@ class ConfigLoader:
     def get_target_urls(self) -> List[str]:
         # target urls are stored in a list of dicts
         # this code loops over each dict and gets the first key (the url)
-        urls = [next(iter(url)) for url in self.config_data.get("target_urls", [])]
+        urls = [url_data.get('url', 'invalid_url_formate') for url_data in self.config_data.get("target_urls", [])]
 
         if not urls:
             raise Exception(f"No urls where found in config: {self.config_file_path}, at least one is required")
-
         return urls
 
-    def is_target_url_scrapable(self, url: str) -> bool:
+    def only_scrape_sub_pages(self, url: str) -> bool:
         """Check if a target URL is scrapable based on the configuration.
 
         This method checks whether a given URL is allowed for scraping, according to the configuration data
         provided in the 'target_urls' section. The 'target_urls' configuration specifies which URLs are
-        considered scrapable and which are not based on the urls corresponding value.
+        considered scrapable and which are not based on the urls corresponding value. true we scrape the target
+        and its sub-pages, false we only scrape the sub pages
 
         Args:
             url (str): The URL to be checked for scrapability.
@@ -48,15 +50,38 @@ class ConfigLoader:
         Returns:
             bool: True if the URL is allowed for scraping, False otherwise.
         """
-        # if the table has been built return the value
         if self._target_url_table:
-            return self._target_url_table.get(url, True)
+            return self._target_url_table.get(url, {}).get('only_scrape_sub_pages', False)
 
-        # otherwise build the table then return the value
+    def _build_target_url_table(self):
         for url_data in self.config_data.get('target_urls', []):
-            self._target_url_table.update(url_data)
+            url = url_data.get('url')
 
-        return self._target_url_table.get(url, True)
+            options = url_data.get('options', {})
+            # incase the options dict doesn't hava all the proper arguments instead of throwing a error we
+            # build the rest of the options with specified default values
+            self._target_url_table.update({url: ConfigLoader._build_options(url, options)})
+
+    @staticmethod
+    def _build_options(url: str, options: Dict) -> Dict:
+        DEFAULT_OPTIONS = {'only_scrape_sub_pages': True, 'render_pages': False}
+
+        for option in DEFAULT_OPTIONS:
+            if options.get(option) is None:
+                Logger.console_log(
+                    f"missing options argument in target url: {url} missing option: {option}, defaulting to {DEFAULT_OPTIONS[option]}",
+                    LoggerLevel.WARNING)
+                options.update({option: DEFAULT_OPTIONS[option]})
+
+        return options
+
+    def get_render_domains(self) -> List[str]:
+        domains = []
+        for url in self._target_url_table:
+            if self._target_url_table[url].get('render_pages'):
+                domains.append(re.search(r'(?:https?:\/\/)?(?:www\.)?([^\/]+)', url).group(1))
+
+        return domains
 
     def get_raw_target_elements(self) -> Generator[Tuple[str, Dict[Any, Any]], None, None]:
         """

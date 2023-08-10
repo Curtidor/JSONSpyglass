@@ -1,20 +1,26 @@
 {
-  "target_urls": [{"https://books.toscrape.com/": false}],
+  "target_urls": [
+    {
+      "url": "https://books.toscrape.com/",
+      "options": {
+        "only_scrape_sub_pages": true,
+        "render_pages": false
+      }
+    }
+  ],
   "elements": [
     {
-      "name": "book price",
+      "name": "Book Price",
       "css_selector": ".product_main p.price_color",
-
       "data_parsing": {
-         "collect_text": true
+        "collect_text": true
       }
     },
     {
-      "name": "book name",
+      "name": "Book Name",
       "css_selector": "h1",
-
       "data_parsing": {
-         "collect_text": true
+        "collect_text": true
       }
     }
   ],
@@ -40,5 +46,5 @@
       "database_name": "your_database"
     }
   },
-  "data_order": ["book name", "book price"]
+  "data_order": ["Book Name", "Book Price"]
 }

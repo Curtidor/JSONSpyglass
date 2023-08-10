@@ -5,11 +5,15 @@ from urllib.parse import urlparse, urljoin
 
 from utils.deserializer import Deserializer
 from events.event_dispatcher import EventDispatcher, Event
-from models.target_url import TargetURL
+from utils.logger import Logger, LoggerLevel
+
+# TODO
+# fix bugs in parse_hrefs
 
 
 class PageNavigator:
-    def __init__(self, page_navigator_json: dict, event_dispatcher: EventDispatcher):
+    def __init__(self, page_navigator_json: dict, event_dispatcher: EventDispatcher, debug_mode: bool = False):
+        self.debug_mode = debug_mode
         self.base_url = ""
         self.allowed_domains = []
         self.target_elements = []
@@ -24,10 +28,19 @@ class PageNavigator:
         self.event_dispatcher.add_listener("new_hrefs", self.parse_hrefs)
 
     def parse_hrefs(self, event) -> None:
+        # this function has a few bugs and need to be worked fixed later, for now its functional enough
+
         # use a set to avoid any potential duplicate urls
         urls = set()
         for href in event.data:
-            href_url = re.search(r'<a[^>]* href="([^"]*)"', str(href)).group(1)
+
+            href_url_match = re.search(r'<a[^>]* href="([^"]*)"', str(href))
+            if not href_url_match:
+                if self.debug_mode: 
+                    Logger.console_log(f"Bad href: {href}", LoggerLevel.INFO)
+                continue
+
+            href_url = href_url_match.group(1)
             if self.is_valid_href(self.url_pattern, href_url):
                 urls.add(urljoin(self.base_url, href_url))
 

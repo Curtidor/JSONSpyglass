@@ -10,7 +10,7 @@ print("STARING..")
 event_dispatcher = EventDispatcher(debug_mode=False)
 
 
-config = ConfigLoader('configs/books.toscrape.com.json')
+config = ConfigLoader('configs/scrapethissite.com.json')
 
 responses_loader = ResponsesLoader(config, event_dispatcher)
 
