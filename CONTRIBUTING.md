@@ -1,5 +1,5 @@
-## How to Contribute
-1. **Fork:** the Repository: To get started, create your own copy of the ScrapeFlow repository. Click the "Fork" button located at the top right of this page. This action will establish a duplicate of the repository under your GitHub account.
+# How to Contribute
+1. **Fork the Repository:** To get started, create your own copy of the ScrapeFlow repository. Click the "Fork" button located at the top right of this page. This action will establish a duplicate of the repository under your GitHub account.
 
 2. **Clone Your Fork:** Transfer the repository to your local machine using the following command: **git clone https://github.com/Curtidor/ScrapeFlow.git**.
 
