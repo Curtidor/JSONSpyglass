@@ -7,77 +7,100 @@ The No-Code JSON Web Scraper is a powerful and flexible tool designed to scrape 
 ## Features
 * Scrapes data from target URLs based on user-defined configurations.
 * Supports multiple target URLs for batch scraping.
-* Configurable element selectors (tags and attributes) to target specific data on web pages.
+* Configurable element selectors (tags, attributes, attribute search hierarchies, and CSS selectors) to target specific data on web pages.
 * Advanced data parsing options (e.g., text collection, attribute extraction).
 * Provides page navigation options to handle multiple pages or domains.
 
 ## Getting Started
 * Clone the repository to your local machine.
 * Install the required dependencies by running pip install -r requirements.txt.
-* Create your JSON configuration file with the desired scraping behavior, see the examples below example configurations.
+* Create your JSON configuration file with the desired scraping behavior, see the examples below for example configurations.
 
-##  Example 1: Scraping Product Prices
+##  Example 1: Scraping country names
 ```json
 {
-  "target_urls": ["https://books.toscrape.com/"],
-  "elements": [
+  "target_urls": [
     {
-      "name": "product_price",
-      "tag": "p",
-      "attributes": [
-        {
-          "name": "class",
-          "value": "price_color"
-        }
-      ],
-      "page_navigator": "global",
-      "data_parsing": {
-         "collect_text": true
+      "url": "https://www.scrapethissite.com/pages/simple/",
+      "options": {
+        "only_scrape_sub_pages": false,
+        "render_pages": false
       }
     }
   ],
-  "page_navigator":
-    {
-      "allowed_domains": ["books.toscrape.com"],
-      "sleep_time": 0.5,
-      "url_pattern": "\\/catalogue\\/.*",
-      "target_elements": ["product_price"]
-    }
-}
-```
-
-## Example 2: Scraping Country Names and Teams
-
-```json
-{
-  "target_urls": ["https://www.scrapethissite.com/pages/simple/",
-    "https://www.scrapethissite.com/pages/forms/"],
   "elements": [
     {
-      "tag": "h3",
-      "attributes": [
-        {
-          "name": "class",
-          "value": "country-name"
-        }
-      ],
-      "data_parsing": {
-         "collect_text": true
-      }
-    },
-    {
-      "tag": "tr",
-      "attributes": [
-        {
-          "name": "class",
-          "value": "team"
-        }
-        ],
+      "name": "country_name",
+      "css_selector": ".h3, h3",
       "data_parsing": {
         "collect_text": true
       }
     }
-  ]
+  ],
+  "data_saving": {
+    "csv": {
+      "enabled": true,
+      "file_path": "output.csv",
+      "delimiter": ","
+    }
+  },
+  "data_order": []
+}
+
+```
+
+## Example 2: Scraping Book names and prices
+
+```json
+{
+  "target_urls": [
+    {
+      "url": "https://books.toscrape.com/",
+      "options": {
+        "only_scrape_sub_pages": true,
+        "render_pages": false
+      }
+    }
+  ],
+  "elements": [
+    {
+      "name": "Book Price",
+      "css_selector": ".product_main p.price_color",
+      "data_parsing": {
+        "collect_text": true
+      }
+    },
+    {
+      "name": "Book Name",
+      "css_selector": "h1",
+      "data_parsing": {
+        "collect_text": true
+      }
+    }
+  ],
+  "page_navigator": {
+    "allowed_domains": ["books.toscrape.com"],
+    "sleep_time": 0.5,
+    "url_pattern": "catalogue\\/(?!.*\\bcategory\\b).*",
+    "base_url": "https://books.toscrape.com/"
+  },
+  "data_saving": {
+    "csv": {
+      "enabled": true,
+      "file_path": "output.csv",
+      "delimiter": ","
+    },
+    "database": {
+      "enabled": true,
+      "type": "mysql",
+      "host": "localhost",
+      "port": 3306,
+      "username": "your_username",
+      "password": "your_password",
+      "database_name": "your_database"
+    }
+  },
+  "data_order": ["Book Name", "Book Price"]
 }
 ```
 ## Usage
