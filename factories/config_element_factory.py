@@ -40,13 +40,23 @@ class ConfigElementFactory:
             elif element_type == ConfigElementFactory.ELEMENT_TARGET:
                 tag = element_data.get('tag', "")
                 attrs = TargetElement.collect_attributes(element_data.get('attributes', []))
+                search_hierarchy = element_data.get('search_hierarchy', {})
 
-                if not tag or not attrs:
-                    raise SyntaxError(f'Improperly formatted element, missing tag or attributes: {element_data}')
+                if search_hierarchy and (tag or attrs):
+                    raise ValueError(
+                        f'Improperly formatted element, you cannot specify a search hierarchy and, tags and attributes on the same element: {element_data}')
 
-                elements[element_type].append(TargetElement(element_name, element_id, target_pages, tag, attrs))
+                new_element = TargetElement(element_name, element_id, target_pages, tag, attrs)
+
+                if search_hierarchy:
+                    new_element.element_search_hierarchy = search_hierarchy
+                    new_element.create_attributes_from_search_hierarchy()
+                else:
+                    new_element.create_search_hierarchy_from_attributes()
+                elements[element_type].append(new_element)
 
             else:
-                raise ValueError(f"Invalid element type {element_type}")
+                raise ValueError(
+                    f"Invalid element type: {element_type}, possibly missing either a css selector, a search hierarchy, or tags and attributes ")
 
         return elements

@@ -10,7 +10,7 @@ print("STARING..")
 event_dispatcher = EventDispatcher(debug_mode=False)
 
 
-config = ConfigLoader('configs/scrapethissite.com.json')
+config = ConfigLoader('configs/scrape_this_site_sandbox/countries_of_the_world.json')
 
 responses_loader = ResponsesLoader(config, event_dispatcher)
 

@@ -1,13 +1,11 @@
 from typing import List, Dict
-from bs4 import BeautifulSoup, PageElement
+from bs4 import BeautifulSoup, PageElement, ResultSet
 
 from events.event_dispatcher import EventDispatcher, Event
 from loaders.config_loader import ConfigLoader
-from models.target_element import TargetElement
-from models.selector_element import SelectorElement
 from models.scarped_data import ScrapedData
 from utils.logger import LoggerLevel, Logger
-from factories.config_element_factory import ConfigElementFactory
+from factories.config_element_factory import ConfigElementFactory, TargetElement, SelectorElement
 
 
 class DataScraper:
@@ -76,7 +74,6 @@ class DataScraper:
             for element_type, element_data in self.elements.items():
                 for element in element_data:
                     if element_type == ConfigElementFactory.ELEMENT_SELECTOR:
-
                         data = self._collect_all_selector_elements(url, element, soup)
                     else:
                         data = self._collect_all_target_elements(url, element, soup)
@@ -110,7 +107,18 @@ class DataScraper:
         Returns:
             ScrapedData: An instance containing the collected data.
         """
-        return ScrapedData(url, soup.find_all(target_element.tag, attrs=target_element.attributes), target_element.element_id)
+        result_set: ResultSet = soup.find_all(
+            attrs=target_element.element_search_hierarchy.pop(0)) if target_element.element_search_hierarchy else []
+
+        for attr in target_element.element_search_hierarchy:
+            for tag in result_set:
+                temp_result_set = tag.find_all(attrs=attr)
+                if temp_result_set:
+                    result_set = temp_result_set
+                else:
+                    return ScrapedData(url, result_set, target_element.element_id)
+
+        return ScrapedData(url, result_set, target_element.element_id)
 
     @staticmethod
     def _collect_all_selector_elements(url: str, selector_element: SelectorElement, soup: BeautifulSoup) -> ScrapedData:
@@ -128,12 +136,12 @@ class DataScraper:
         return ScrapedData(url, soup.select(selector_element.css_selector), selector_element.element_id)
 
     @staticmethod
-    def _is_target_page(element_target_pages: list[str], url: str) -> bool:
+    def _is_target_page(element_target_pages: List[str], url: str) -> bool:
         """
         Check if the element is meant to target the current URL.
 
         Args:
-            element_target_pages (list[str]): List of URLs or 'any' to indicate any URL is a target.
+            element_target_pages (List[str]): List of URLs or 'any' to indicate any URL is a target.
             url (str): The URL of the web page.
 
         Returns:

@@ -22,7 +22,7 @@ class DataParser:
             for element in scraped_data.get_elements():
 
                 if parsing_data.get("collect_text"):
-                    cleaned_data.append(element.text)
+                    cleaned_data.append(element.text.strip())
 
                 elif parsing_data.get("remove_tags"):
                     cleaned_data.append(str(element.unwrap()))
@@ -48,11 +48,3 @@ class DataParser:
         if value:
             return value.group(1)
         return ""
-
-    @staticmethod
-    def remove_special_characters(text: str) -> str:
-        special_characters_pattern = r'[^\w\s]'  # Matches any non-word character and non-whitespace character
-
-        cleaned_text = re.sub(special_characters_pattern, '', text)
-
-        return cleaned_text

@@ -28,15 +28,6 @@
       "enabled": true,
       "file_path": "output.csv",
       "delimiter": ","
-    },
-    "database": {
-      "enabled": true,
-      "type": "mysql",
-      "host": "localhost",
-      "port": 3306,
-      "username": "your_username",
-      "password": "your_password",
-      "database_name": "your_database"
     }
   },
   "data_order": ["Book Name", "Book Price"]

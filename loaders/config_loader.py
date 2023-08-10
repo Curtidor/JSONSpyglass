@@ -97,12 +97,11 @@ class ConfigLoader:
             raise ValueError(f"No elements were found in the file: {self.config_file_path}")
 
         for element in elements:
+            element_type = "BAD SELECTOR"
             if element.get('tag', ""):
                 element_type = "target"
             elif element.get('css_selector', ""):
                 element_type = "selector"
-            else:
-                raise ValueError(f"Invalid element configuration: {element}")
 
             yield element_type, element
 

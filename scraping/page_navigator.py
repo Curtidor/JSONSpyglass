@@ -8,7 +8,7 @@ from events.event_dispatcher import EventDispatcher, Event
 from utils.logger import Logger, LoggerLevel
 
 # TODO
-# fix bugs in parse_hrefs
+# fix bugs in parse_hrefs / add support for Pagination
 
 
 class PageNavigator:
