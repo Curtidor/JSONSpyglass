@@ -62,4 +62,4 @@ class TargetElement(ConfigElement):
         Note:
             The target's attributes will reflect the top-most parent attributes.
         """
-        self.attributes = self.element_search_hierarchy[0] if self.element_search_hierarchy else {}
+        self.attributes = self.element_search_hierarchy[0] if self.element_search_hierarchy else []
