@@ -20,18 +20,22 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
         listener_two_results = []
 
         async def listener_one(event):
+            print("FPEJPEF")
             # Simulate some asynchronous work by waiting for 0.3 seconds
             await asyncio.sleep(0.3)
             listener_one_results.append("success")
 
         async def listener_two(event):
+            print("WHYY")
             listener_two_results.append("success")
 
-        event_dispatcher = EventDispatcher(debug_mode=True)
+        event_dispatcher = EventDispatcher(debug_mode=False)
 
         # Add both listeners to the same event ("test") in the EventDispatcher
         event_dispatcher.add_listener("test", listener_one)
         event_dispatcher.add_listener("test", listener_two)
+
+        event_dispatcher.start_event_loop()
 
         # Trigger the event twice asynchronously using async_trigger
         await asyncio.gather(
@@ -39,8 +43,13 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
             event_dispatcher.async_trigger(Event("test", "test_type"))
         )
 
+
+        event_dispatcher.close_event_loop()
+
+
         # Assert that listener_one has been called only once (due to the 0.3-second delay),
         # and listener_two has been called twice (once for each event trigger).
+
         self.assertEqual(listener_one_results, ["success"])
         self.assertEqual(listener_two_results, ["success", "success"])
 

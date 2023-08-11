@@ -27,7 +27,7 @@ class DataScraper:
         self.event_dispatcher = event_dispatcher
         self.event_dispatcher.add_listener("new_responses", self.collect_data)
 
-    def collect_data(self, event: Event) -> None:
+    async def collect_data(self, event: Event) -> None:
         """
         Collect data from the responses obtained by the response loader.
 
@@ -50,7 +50,7 @@ class DataScraper:
             results.extend(page_data['results'])
 
         self.event_dispatcher.trigger(Event("scraped_data", "raw_data", data=results))
-        self.event_dispatcher.trigger(Event("new_hrefs", "data_update", data=hrefs))
+        await self.event_dispatcher.async_trigger(Event("new_hrefs", "raw_hrefs", data=hrefs))
 
     def _process_response(self, response: Dict[str, str]) -> dict[str, list[ScrapedData] | list[PageElement]]:
         """
