@@ -7,6 +7,7 @@ from events.event_listener import Priority
 
 
 class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
+
     async def test_busy_async_event(self):
         """
         Test the EventDispatcher's ability to handle busy async listeners.
@@ -19,23 +20,20 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
         listener_one_results = []
         listener_two_results = []
 
+        event_dispatcher = EventDispatcher()
+        event_dispatcher.start()
+
         async def listener_one(event):
-            print("FPEJPEF")
             # Simulate some asynchronous work by waiting for 0.3 seconds
             await asyncio.sleep(0.3)
             listener_one_results.append("success")
 
         async def listener_two(event):
-            print("WHYY")
             listener_two_results.append("success")
-
-        event_dispatcher = EventDispatcher(debug_mode=False)
 
         # Add both listeners to the same event ("test") in the EventDispatcher
         event_dispatcher.add_listener("test", listener_one)
         event_dispatcher.add_listener("test", listener_two)
-
-        event_dispatcher.start_event_loop()
 
         # Trigger the event twice asynchronously using async_trigger
         await asyncio.gather(
@@ -43,13 +41,10 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
             event_dispatcher.async_trigger(Event("test", "test_type"))
         )
 
-
-        event_dispatcher.close_event_loop()
-
+        await event_dispatcher.close()
 
         # Assert that listener_one has been called only once (due to the 0.3-second delay),
         # and listener_two has been called twice (once for each event trigger).
-
         self.assertEqual(listener_one_results, ["success"])
         self.assertEqual(listener_two_results, ["success", "success"])
 
@@ -66,15 +61,19 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
         listener_one_results = []
         listener_two_results = []
 
+        event_dispatcher = EventDispatcher()
+        event_dispatcher.start()
+
         # Define two asynchronous event listeners (listener_one and listener_two)
         async def listener_one(event):
+            print('HIGH')
             listener_one_results.append("success")
 
         async def listener_two(event):
+            print("NORMAL")
             listener_two_results.append("success")
 
         # Create an instance of the EventDispatcher
-        event_dispatcher = EventDispatcher()
 
         # Add both listeners to the same event ("test") in the EventDispatcher with specified priorities
         event_dispatcher.add_listener("test", listener_one, priority=Priority.HIGH)
@@ -82,6 +81,8 @@ class TestAsyncEvent(unittest.IsolatedAsyncioTestCase):
 
         # Trigger the event asynchronously with max_responders=1
         await event_dispatcher.async_trigger(Event("test", "test_type", max_responders=1))
+        #await asyncio.sleep(0.2)
+        await event_dispatcher.close()
 
         # Assert that only the highest priority listener (listener_one) has been called
         # and the second listener (listener_two) has not been executed due to max_responders=1

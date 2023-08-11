@@ -13,6 +13,7 @@ async def main():
     print("STARTING..")
 
     event_dispatcher = EventDispatcher(debug_mode=True)
+    event_dispatcher.start()
 
     #  config = ConfigLoader('configs/scrape_this_site_sandbox/hockey_teams_pagination.json')
     config = ConfigLoader('configs/books.toscrape.com.json')
@@ -27,9 +28,7 @@ async def main():
     # this will start everything by getting the initial responses
     await responses_loader.collect_responses()
 
-    while not event_dispatcher.is_queue_empty():
-        print(event_dispatcher.queue_size())
-        pass
+    await event_dispatcher.close()
 
     print("END...")
 

@@ -1,6 +1,5 @@
 import asyncio
 
-from asyncio import Queue, QueueEmpty
 from typing import Callable, Any, Set, List, Dict
 
 from utils.logger import Logger, LoggerLevel
@@ -12,12 +11,24 @@ class EventDispatcher:
     _busy_listeners: Set['Callable'] = set()
 
     def __init__(self, debug_mode: bool = False):
-        self._event_loop_running = False
-        self._listeners: Dict[str, List['EventListener']] = {}
         self.debug_mode = debug_mode
+        self._listeners: Dict[str, List['EventListener']] = {}
         self._cancel_events = False
 
-        self._event_queue = Queue()
+        self._event_loop = asyncio.get_event_loop()
+        self._event_queue = asyncio.Queue()
+        self._is_event_loop_running = False
+
+    def start(self):
+        if not self._is_event_loop_running:
+            self._event_loop.create_task(self._event_loop_runner())
+            self._is_event_loop_running = True
+
+    async def close(self):
+        while self._event_queue.qsize():
+            # wait for current queued events to finish before closing
+            await asyncio.sleep(0.1)
+        self._is_event_loop_running = False
 
     def add_listener(self, event_name: str, listener: Callable, priority: Priority = Priority.NORMAL) -> None:
         """
@@ -39,13 +50,14 @@ class EventDispatcher:
                 return  # To ensure only one instance is removed
 
     def trigger(self, event: Event, *args, **kwargs) -> None:
+        if not self._is_event_loop_running:
+            raise Exception("No event loop running")
         self._event_queue.put_nowait((self._trigger, event, args, kwargs))
 
     def _trigger(self, event: Event, *args, **kwargs) -> None:
         """
         Trigger the event and notify all registered listeners.
         """
-
         if event.event_name not in self._listeners or self._cancel_events:
             return
 
@@ -63,6 +75,8 @@ class EventDispatcher:
                 return
 
     async def async_trigger(self, event: Event, *args: Any, **kwargs: Any) -> None:
+        if not self._is_event_loop_running:
+            raise Exception("No event loop running")
         self._event_queue.put_nowait((self._async_trigger, event, args, kwargs))
 
     async def _async_trigger(self, event: Event, *args: Any, **kwargs: Any) -> None:
@@ -76,38 +90,29 @@ class EventDispatcher:
         listeners = self._listeners.get(event.event_name, [])
         max_responders = event.max_responders if event.max_responders != -1 else len(listeners)
 
-        async def run_listener(listener: EventListener):
-            if self.debug_mode:
+        await asyncio.gather(*[self._run_listener(listener, event, *args, **kwargs) for listener in listeners[:max_responders]])
+
+    async def _run_listener(self, listener: EventListener, event: Event, *args, **kwargs):
+        if self.debug_mode:
+            Logger.console_log(
+                f"async calling: [{listener.callback.__name__}] from event: [{event.event_name}]",
+                LoggerLevel.INFO, include_time=True)
+
+            if listener.callback in self._busy_listeners:
                 Logger.console_log(
-                    f"async calling: [{listener.callback.__name__}] from event: [{event.event_name}]",
+                    f"skipping call to: [{listener.callback.__name__}] as its busy",
                     LoggerLevel.INFO, include_time=True)
 
-                if listener.callback in self._busy_listeners:
-                    Logger.console_log(
-                        f"skipping call to: [{listener.callback.__name__}] as its busy",
-                        LoggerLevel.INFO, include_time=True)
-
-            if listener.callback not in self._busy_listeners or event.allow_busy_trigger:
-                self._busy_listeners.add(listener.callback)
-                await listener.callback(event, *args, **kwargs)
-                self._remove_busy_listener(listener.callback)
-
-        await asyncio.gather(*[run_listener(listener) for listener in listeners[:max_responders]])
+        if listener.callback not in self._busy_listeners or event.allow_busy_trigger:
+            self._busy_listeners.add(listener.callback)
+            await listener.callback(event, *args, **kwargs)
+            self._remove_busy_listener(listener.callback)
 
     def disable_all_events(self) -> None:
         self._cancel_events = True
 
     def enable_all_events(self) -> None:
         self._cancel_events = False
-
-    def start_event_loop(self):
-        if not self._event_loop_running:
-            asyncio.create_task(self._event_loop())
-            self._event_loop_running = True
-
-    def close_event_loop(self):
-        if self._event_loop_running:
-            self._event_queue.put_nowait(None)
 
     def is_queue_empty(self) -> bool:
         return self._event_queue.empty()
@@ -136,15 +141,13 @@ class EventDispatcher:
         if callback in self._busy_listeners:
             self._busy_listeners.remove(callback)
 
-    async def _event_loop(self):
-        while True:
+    async def _event_loop_runner(self):
+        while self._is_event_loop_running:
             task = await self._event_queue.get()
-            if task is None:  # sentinel value to stop the event loop
-                self._event_loop_running = False
-                break
             func, event, args, kwargs = task
             if asyncio.iscoroutinefunction(func):
-                await func(event, *args, **kwargs)
+                print("GOT FUNC", func.__name__)
+                self._event_loop.create_task(func(event, *args, **kwargs))
             else:
                 func(event, *args, **kwargs)
             self._event_queue.task_done()
