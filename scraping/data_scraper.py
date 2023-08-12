@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Dict
 from bs4 import BeautifulSoup, PageElement, ResultSet
 
@@ -26,6 +27,10 @@ class DataScraper:
 
         self.event_dispatcher = event_dispatcher
         self.event_dispatcher.add_listener("new_responses", self.collect_data)
+
+    async def wait_for_empty_responses_to_reach_threshold(self):
+        while self._empty_responses < self._max_empty_responses:
+            await asyncio.sleep(0.1)
 
     async def collect_data(self, event: Event) -> None:
         """
@@ -108,9 +113,12 @@ class DataScraper:
             ScrapedData: An instance containing the collected data.
         """
         result_set: ResultSet = soup.find_all(
-            attrs=target_element.element_search_hierarchy.pop(0)) if target_element.element_search_hierarchy else []
+            attrs=target_element.element_search_hierarchy[0]) if target_element.element_search_hierarchy else []
 
-        for attr in target_element.element_search_hierarchy:
+        if len(target_element.element_search_hierarchy) <= 1:
+            return ScrapedData(url, result_set, target_element.element_id)
+
+        for attr in target_element.element_search_hierarchy[1:]:
             for tag in result_set:
                 temp_result_set = tag.find_all(attrs=attr)
                 if temp_result_set:
