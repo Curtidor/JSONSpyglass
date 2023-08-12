@@ -1,0 +1,40 @@
+{
+  "target_urls": [
+    {
+      "url": "https://www.scrapethissite.com/pages/forms/",
+      "options": {
+        "only_scrape_sub_pages": true,
+        "render_pages": false
+      }
+    }
+  ],
+  "elements": [
+    {
+      "name": "team_name",
+      "tag": "td",
+      "attributes": [
+        {
+          "name": "class",
+          "value": "name"
+        }
+      ],
+      "data_parsing": {
+        "collect_text": true
+      }
+    }
+  ],
+  "page_navigator": {
+    "allowed_domains": ["scrapethissite.com"],
+    "sleep_time": 0.5,
+    "url_pattern": "/pages/forms/\\?page_num=\\d",
+    "base_url": "https://www.scrapethissite.com/pages/forms/"
+  },
+  "data_saving": {
+    "csv": {
+      "enabled": true,
+      "file_path": "output.csv",
+      "delimiter": ","
+    }
+  },
+  "data_order": []
+}

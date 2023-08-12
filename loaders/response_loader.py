@@ -1,7 +1,7 @@
 import asyncio
 import re
 
-from typing import List
+from typing import List, Tuple
 from requests_html import AsyncHTMLSession, HTMLResponse
 
 from events.event_dispatcher import EventDispatcher, Event
@@ -9,7 +9,9 @@ from loaders.config_loader import ConfigLoader
 from utils.logger import Logger, LoggerLevel
 
 
-# TODO: add rotating proxy servers and rotating user agents
+# TODO:
+#  add rotating proxy servers and rotating user agents
+#  fix this error when rendering: sys:1: RuntimeWarning: coroutine 'Launcher.killChrome' was never awaited
 
 
 class ResponsesLoader:
@@ -27,19 +29,23 @@ class ResponsesLoader:
         self._urls = config.get_target_urls()
         self._domains_to_render = config.get_render_domains()
 
-    async def fetch_url(self, url: str, session: AsyncHTMLSession) -> tuple[str, str]:
-        response: HTMLResponse = await session.get(url, headers=ResponsesLoader._user_agent)
+        self._max_renders = 6
+        self._render_semaphore = asyncio.Semaphore(self._max_renders)
 
-        if response.status_code == 200:
-            Logger.console_log(f"Received response from: {url}", LoggerLevel.INFO, include_time=True)
-        else:
-            Logger.console_log(f"Bad response from: {url}, status code: [{response.status_code}]", LoggerLevel.ERROR, include_time=True)
+    async def fetch_url(self, url: str, session: AsyncHTMLSession) -> tuple[str, bytes]:
+        async with self._render_semaphore:
+            response: HTMLResponse = await session.get(url, headers=ResponsesLoader._user_agent)
 
-        if self._get_domain(url) in self._domains_to_render:
-            Logger.console_log(f"Rendering page: {url}", LoggerLevel.INFO, include_time=True)
-            await response.html.arender(timeout=10)
+            if response.status_code == 200:
+                Logger.console_log(f"Received response from: {url}", LoggerLevel.INFO, include_time=True)
+            else:
+                Logger.console_log(f"Bad response from: {url}, status code: [{response.status_code}]", LoggerLevel.ERROR, include_time=True)
 
-        return url, response.html.html
+            if self._get_domain(url) in self._domains_to_render:
+                Logger.console_log(f"Rendering page: {url}", LoggerLevel.INFO, include_time=True)
+                await response.html.arender(timeout=10)
+
+            return url, response.content
 
     async def fetch_multiple_urls(self) -> None:
         responses = []
@@ -62,14 +68,13 @@ class ResponsesLoader:
         self._urls.clear()
         self.responses = responses
 
-    def collect_responses(self) -> None:
-        asyncio.run(self.fetch_multiple_urls())
-        self.event_dispatcher.trigger(Event("new_responses", "loaded_responses", data=self.responses))
+    async def collect_responses(self):
+        await self.fetch_multiple_urls()
+        await self.event_dispatcher.async_trigger(Event("new_responses", "loaded_responses_type", data=self.responses))
 
-    def add_urls(self, event):
+    async def add_urls(self, event):
         self._urls += event.data
-        asyncio.run(self.fetch_multiple_urls())
-        self.event_dispatcher.trigger(Event("new_responses", "loaded_responses", data=self.responses))
+        await self.collect_responses()
 
     def show_errors(self) -> None:
         for error in self._errors:

@@ -80,4 +80,4 @@ class Logger:
 
 if __name__ == "__main__":
     Logger.console_log("LMAO", LoggerLevel.ERROR)
-    Logger.file_log('../debug_output/output.text', "TEST", LoggerLevel.INFO, include_time=True)
+    Logger.file_log('../../DataScraper/debug_output/output.text', "TEST", LoggerLevel.INFO, include_time=True)

@@ -1,6 +1,7 @@
 import unittest
 from models.target_element import TargetElement
 
+
 class TestTargetElementModel(unittest.TestCase):
     def setUp(self):
         self.single_class_attributes = {

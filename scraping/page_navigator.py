@@ -27,24 +27,26 @@ class PageNavigator:
         # listen for new hrefs found by the data scaper
         self.event_dispatcher.add_listener("new_hrefs", self.parse_hrefs)
 
-    def parse_hrefs(self, event) -> None:
+        self._visited_sites = set()
+
+    async def parse_hrefs(self, event) -> None:
         # this function has a few bugs and need to be worked fixed later, for now its functional enough
 
         # use a set to avoid any potential duplicate urls
         urls = set()
         for href in event.data:
+            if self.is_valid_href(self.url_pattern, href):
+                url = urljoin(self.base_url, href)
+                if url in self._visited_sites:
+                    continue
 
-            href_url_match = re.search(r'<a[^>]* href="([^"]*)"', str(href))
-            if not href_url_match:
-                if self.debug_mode: 
-                    Logger.console_log(f"Bad href: {href}", LoggerLevel.INFO)
-                continue
+                self._visited_sites.add(url)
+                urls.add(urljoin(self.base_url, href))
+            else:
+                pass
+                # Logger.console_log(f"Bad href, did not match pattern: {href}", LoggerLevel.INFO)
 
-            href_url = href_url_match.group(1)
-            if self.is_valid_href(self.url_pattern, href_url):
-                urls.add(urljoin(self.base_url, href_url))
-
-        self.event_dispatcher.trigger(Event("new_urls", "data_update", data=urls))
+        await self.event_dispatcher.async_trigger(Event("new_urls", "data_update", data=urls))
 
     @staticmethod
     def formate_urls(base_url: str, hrefs: str) -> Generator[str, None, None]:
