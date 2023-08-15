@@ -29,7 +29,7 @@ class ResponsesLoader:
         self._urls = config.get_target_urls()
         self._domains_to_render = config.get_render_domains()
 
-        self._max_renders = 6
+        self._max_renders = 4
         self._render_semaphore = asyncio.Semaphore(self._max_renders)
 
     async def fetch_url(self, url: str, session: AsyncHTMLSession) -> tuple[str, bytes]:

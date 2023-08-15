@@ -7,17 +7,30 @@ from models.target_element import TargetElement
 class ConfigElementFactory:
     ELEMENT_SELECTOR = 'selector'
     ELEMENT_TARGET = 'target'
+    ELEMENT_SEARCH_HIERARCHY = 'hierarchy'
 
     @staticmethod
-    def create_elements(generator: Generator[Tuple[str, Dict[Any, Any]], None, None]) -> Dict[str, List[SelectorElement | TargetElement]]:
-        """Creates elements based on the provided generator.
+    def create_elements(generator: Generator[Tuple[str, Dict[Any, Any]], None, None], data_order: List[str]) \
+            -> Dict[str, List[SelectorElement | TargetElement]]:
+        """
+        Creates elements based on the provided generator.
 
-        Args:
-            generator (Generator[Tuple[str, Dict[Any, Any]]]): A generator yielding element type and data.
+        :param generator: generator yielding element type and data.
+        :param data_order: the order elements should be in
 
-        Returns:
+        returns:
             Dict[str, List[SelectorElement | TargetElement]]: Dictionary containing created elements.
         """
+
+        elements = ConfigElementFactory._create_elements(generator)
+        ConfigElementFactory._sort_elements(elements, data_order)
+
+        return elements
+
+    @staticmethod
+    def _create_elements(generator: Generator[Tuple[str, Dict[Any, Any]], None, None]) \
+            -> Dict[str, List[SelectorElement | TargetElement]]:
+
         elements: Dict[str, List[Any]] = {
             ConfigElementFactory.ELEMENT_SELECTOR: [],
             ConfigElementFactory.ELEMENT_TARGET: []
@@ -37,10 +50,11 @@ class ConfigElementFactory:
                     raise SyntaxError(f'Improperly formatted element, missing css selector: {element_data}')
 
                 elements[element_type].append(SelectorElement(element_name, element_id, target_pages, css_selector))
+
             elif element_type == ConfigElementFactory.ELEMENT_TARGET:
                 tag = element_data.get('tag', "")
                 attrs = TargetElement.collect_attributes(element_data.get('attributes', []))
-                search_hierarchy = element_data.get('search_hierarchy', {})
+                search_hierarchy = element_data.get('search_hierarchy', [])
 
                 if search_hierarchy and (tag or attrs):
                     raise ValueError(
@@ -49,6 +63,8 @@ class ConfigElementFactory:
                 new_element = TargetElement(element_name, element_id, target_pages, tag, attrs)
 
                 if search_hierarchy:
+                    search_hierarchy = TargetElement.format_search_hierarchy(search_hierarchy)
+
                     new_element.element_search_hierarchy = search_hierarchy
                     new_element.create_attributes_from_search_hierarchy()
                 else:
@@ -60,3 +76,20 @@ class ConfigElementFactory:
                     f"Invalid element type: {element_type}, possibly missing either a css selector, a search hierarchy, or tags and attributes ")
 
         return elements
+
+    @staticmethod
+    def _sort_elements(element_data: Dict[str, List[SelectorElement | TargetElement]], data_order: List[str]) \
+            -> Dict[str, List[SelectorElement | TargetElement]]:
+
+        if not data_order:
+            return element_data
+
+        for event_type in element_data:
+            elements = element_data[event_type]
+            sorted_elements = sorted(elements, key=lambda x: data_order.index(x.name))
+
+            element_data[event_type] = sorted_elements
+
+        return element_data
+
+

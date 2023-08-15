@@ -1,0 +1,39 @@
+{
+  "target_urls": [
+    {
+      "url": "https://www.autotrader.ca/cars/dodge%20or%20ram/2500/on/?rcp=15&rcs=0&srt=35&pRng=%2C50000&prx=-2&prv=Ontario&loc=n0l%202n0&body=Truck&hprc=True&wcp=True&inMarket=advancedSearch",
+      "options": {
+        "render_pages": true,
+        "only_scrape_sub_pages": true
+      }
+    }
+  ],
+  "elements": [
+    {
+     "css_selector": ".hero-wrapper-values[_ngcontent-jhs-c168] .hero-price-wrapper[_ngcontent-jhs-c168] .hero-price-container[_ngcontent-jhs-c168] .dolar-sign-fr[_ngcontent-jhs-c168], .hero-wrapper-values[_ngcontent-jhs-c168] .hero-price-wrapper[_ngcontent-jhs-c168] .hero-price-container[_ngcontent-jhs-c168] .hero-price[_ngcontent-jhs-c168]",
+      "data_parsing": {
+        "collect_text": true
+      }
+    },
+    {
+      "css_selector": "#heroTitleWrapper > h1",
+      "data_parsing": {
+        "collect_text": true
+      }
+    }
+  ],
+ "page_navigator": {
+    "allowed_domains": ["www.autotrader.ca"],
+    "sleep_time": 0.5,
+    "url_pattern": "/a/ram/2500/[a-z]+/ontario/5_[0-9]+_(on[0-9]+|[0-9]{17})/?.*",
+    "pagination_pattern": ["FEATURE NOT ADDED YET"],
+    "base_url": "https://www.autotrader.ca/cars/dodge%20or%20ram/2500/on/?rcp=15&rcs=0&srt=35&pRng=%2C50000&prx=-2&prv=Ontario&loc=n0l%202n0&body=Truck&hprc=True&wcp=True&inMarket=advancedSearch"
+  },
+  "data_saving": {
+    "csv": {
+      "enabled": true,
+      "file_path": "output.csv",
+      "delimiter": ","
+    }
+}
+  }

@@ -98,7 +98,9 @@ class ConfigLoader:
 
         for element in elements:
             element_type = "BAD SELECTOR"
-            if element.get('tag', ""):
+            # we treat search hierarchies the same as target elements as all target elements are
+            # formatted into search hierarchies
+            if element.get('tag', "") or element.get('search_hierarchy'):
                 element_type = "target"
             elif element.get('css_selector', ""):
                 element_type = "selector"
@@ -168,3 +170,9 @@ class ConfigLoader:
             Logger.console_log(f"No page navigation data in config: {self.config_file_path}", LoggerLevel.WARNING)
 
         return page_nav_data
+
+    def get_saving_data(self) -> Dict[Any, Any]:
+        return self.config_data.get('data_saving')
+
+    def get_data_order(self) -> List[str]:
+        return self.config_data.get('data_order', None)

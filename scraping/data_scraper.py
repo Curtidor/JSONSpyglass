@@ -46,6 +46,9 @@ class DataScraper:
                 Logger.console_log(f"EXITING DUE TO NO DATA FOUND IN THE LAST {self._empty_responses} RESPONSES", LoggerLevel.INFO)
                 return
             self._empty_responses += 1
+        # reset the empty response count
+        else:
+            self._empty_responses = 0
 
         hrefs = set()
         results = []
@@ -69,6 +72,7 @@ class DataScraper:
         """
         hrefs = []
         results = []
+
         for url, content in response.items():
             soup = BeautifulSoup(content, "html.parser")
             hrefs.extend(self._collect_hrefs(soup))
@@ -77,6 +81,8 @@ class DataScraper:
                 continue
 
             for element_type, element_data in self.elements.items():
+                if not element_data:
+                    continue
                 for element in element_data:
                     if element_type == ConfigElementFactory.ELEMENT_SELECTOR:
                         data = self._collect_all_selector_elements(url, element, soup)
