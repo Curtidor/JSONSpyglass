@@ -88,8 +88,7 @@ class DataSaver:
                 csv_writer.writerows(ordered_data)
             # else its vertical which means item names are on the top
             else:
-                for data_set in ordered_data:
-                    csv_writer.writerow(data_set)
+                csv_writer.writerows(zip(*ordered_data))
 
     @staticmethod
     def save_txt(txt_options: Dict[Any, Any], data: Any, data_keys: List) -> None:
@@ -114,5 +113,3 @@ class DataSaver:
 
         for save_type in self.save_config:
             self.save_types.append(save_type)
-
-
