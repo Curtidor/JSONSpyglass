@@ -29,6 +29,16 @@ class DataSaver:
             'database': self.save_database
         }
 
+    def setup(self):
+        for save_type in self.save_types:
+            save_func = self._save_func_mapping.get(save_type)
+
+            if not save_func:
+                Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.WARNING)
+                continue
+
+            save_func(self.save_config.get(save_type), self.data_keys, len(self.data_keys))
+
     def save(self, data: Any):
         """
         Given data is saved based on the initialized save types and configurations
@@ -42,20 +52,21 @@ class DataSaver:
                 Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.WARNING)
                 continue
 
-            save_func(self.save_config.get(save_type), data, self.data_keys)
+            save_func(self.save_config.get(save_type), data, len(self.data_keys))
 
     @staticmethod
-    def save_csv(csv_options: Dict[Any, Any], data: Any, data_keys: List) -> None:
+    def save_csv(csv_options: Dict[Any, Any], data: Any, t_items: int) -> None:
         """
         Data is saved in a csv file based on the specified options
 
+        :param t_items: how many total items there are
         :param csv_options: Dict containing csv saving options
         :param data: Data to be saved
-        :param data_keys: Keys to access and order the data
         """
 
         ALLOWED_ORIENTATIONS = ['horizontal', 'vertical']
 
+        # if save feature is disabled return without saving
         if not csv_options.get('enabled', True):
             return
 
@@ -68,20 +79,12 @@ class DataSaver:
         if orientation not in ALLOWED_ORIENTATIONS:
             raise ValueError(f"Unknown orientation: {orientation}, allowed orientations are => {ALLOWED_ORIENTATIONS} ")
 
-        # create a 2d list where the first element of each sub list
-        # is the name of the type of data we are saving (i.e. [["book_name"], ["book_price"]])
-        if data_keys:
-            ordered_data = [[key] for key in data_keys]
-        # if the order to save the data is not given we just save it all in a single list
-        # in the future, this should change as the data scraper will look at the different elements
-        # and save based on id, but for now we just save in a single list
-        else:
-            ordered_data = [[]]
+        ordered_data = [[] for i in range(t_items)]
 
         for index, item in enumerate(ordered_data):
             item.extend(data[index::len(ordered_data)])
 
-        with open(csv_file_path, mode='w', newline='') as csv_file:
+        with open(csv_file_path, mode='a', newline='') as csv_file:
             csv_writer = csv.writer(csv_file)
             # horizontal means item names are on the side
             if orientation == 'horizontal':
@@ -91,14 +94,14 @@ class DataSaver:
                 csv_writer.writerows(zip(*ordered_data))
 
     @staticmethod
-    def save_txt(txt_options: Dict[Any, Any], data: Any, data_keys: List) -> None:
+    def save_txt(txt_options: Dict[Any, Any], data: Any, t_items: int) -> None:
         """
         Placeholder for future implementation of txt saving feature
         """
         raise NotImplementedError("This feature will be added soon!")
 
     @staticmethod
-    def save_database(db_options: Dict[Any, Any], data: Any, data_keys: List) -> None:
+    def save_database(db_options: Dict[Any, Any], data: Any, t_items: int) -> None:
         """
         Placeholder for future implementation of database saving feature
         """

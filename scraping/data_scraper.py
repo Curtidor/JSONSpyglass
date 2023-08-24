@@ -32,7 +32,7 @@ class DataScraper:
         while self._empty_responses < self._max_empty_responses:
             await asyncio.sleep(0.1)
 
-    async def collect_data(self, event: Event) -> None:
+    def collect_data(self, event: Event) -> None:
         """
         Collect data from the responses obtained by the response loader.
 
@@ -58,7 +58,6 @@ class DataScraper:
             results.extend(page_data['results'])
 
         self.event_dispatcher.trigger(Event("scraped_data", "raw_data", data=results))
-        await self.event_dispatcher.async_trigger(Event("new_hrefs", "raw_hrefs", data=hrefs))
 
     def _process_response(self, response: Dict[str, str]) -> dict[str, list[ScrapedData] | list[PageElement]]:
         """

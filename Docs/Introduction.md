@@ -76,7 +76,7 @@ When defining elements, you first need to create a list called **elements**.
 
 ## CSS Selectors
 
-Now that you have a list of elements, it's time to create your first element, referred to as a **target element** from now on.
+Now that you have a list of elements, it's time to create your first element.
 
 ```json
 "elements": [
