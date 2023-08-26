@@ -6,7 +6,6 @@ from urllib.robotparser import RobotFileParser
 from selectolax.parser import HTMLParser
 
 from loaders.response_loader import ResponseLoader, ResponseInformation
-from events.event_dispatcher import EventDispatcher
 
 
 class Crawler:
@@ -47,7 +46,6 @@ class Crawler:
         self._to_visit = set()
         self._visited = set()
         self._loop = None
-        self._urls_to_retry = set()
         self._running_tasks = set()
 
         # robot.txt parser
@@ -89,7 +87,6 @@ class Crawler:
         await asyncio.gather(*self._running_tasks)
         print("TOTAL SITES VISITED:", len(self._visited))
         print("TOTAL ATTEMPTED LINK BUILDS:", self._total_link_build_attempts)
-        print("TOTAL ERRORS:", len(self._urls_to_retry))
         print("SITES TO VISIT:", len(self._to_visit))
 
     def extract_links(self, base_url: str, html: str) -> Generator[str, Any, Any]:
@@ -148,13 +145,7 @@ class Crawler:
             str: Extracted URLs.
         """
         for url, response_info in responses.items():
-            if isinstance(response_info, Exception):
-                print("ERROR:", response_info)
-                self._urls_to_retry.add(url)
-                continue
             self._visited.add(url)
-            print(f"status_code={response_info.status_code}, url={url}, depth={self._current_depth}")
-
             for new_url in self.extract_links(url, response_info.html):
                 yield new_url
 

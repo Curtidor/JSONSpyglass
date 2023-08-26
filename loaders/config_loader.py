@@ -1,7 +1,5 @@
 import json
-import re
 from typing import Dict, List, Any, Tuple, Generator
-
 from loaders.response_loader import ResponseLoader
 from scraping.crawler import Crawler
 from utils.logger import Logger, LoggerLevel
@@ -15,7 +13,7 @@ class ConfigLoader:
 
         self._target_url_table = {}
         self._parsing_options_cache = {}
-        self._formate_config()
+        self._add_identifiers_to_elements()
         self._build_target_url_table()
 
     def load_config(self) -> dict:
@@ -33,7 +31,7 @@ class ConfigLoader:
         if not urls:
             raise Exception(f"No urls where found in config: {self.config_file_path}, at least one is required")
 
-        for url, crawler_data in zip(urls, self._build_crawlers_setup_data(urls)):
+        for url, crawler_data in zip(urls, self._build_crawlers(urls)):
             yield url, crawler_data
 
     def only_scrape_sub_pages(self, url: str) -> bool:
@@ -116,7 +114,7 @@ class ConfigLoader:
     def get_data_order(self) -> List[str]:
         return self.config_data.get('data_order', None)
 
-    def _formate_config(self):
+    def _add_identifiers_to_elements(self):
         index_id = 0
         for _, element in self.get_raw_target_elements():
             if element.get("id"):
@@ -124,30 +122,31 @@ class ConfigLoader:
             element["id"] = index_id
             index_id += 1
 
-    def _build_crawlers_setup_data(self, urls: List[str]) -> Generator[Crawler, Any, Any]:
+    def _build_crawlers(self, seeds: List[str]) -> Generator[Crawler, Any, Any]:
         NO_CRAWLER_FOUND = 'no_crawler_found'
 
         crawler_options_collection = [crawler_data.get('crawler', NO_CRAWLER_FOUND) for crawler_data in self.config_data.get('target_urls')]
         # for every target_url there's an url, so we can safely use the index from crawler_options_collection to
-        # index the urls list as they are in the same order and of the same length
+        # index the seeds list as they are in the same order and of the same length
         for index, crawler_options_raw_data in enumerate(crawler_options_collection):
+            render_pages = self._target_url_table.get(seeds[index], {}).get('render_pages', False)
             if crawler_options_raw_data == NO_CRAWLER_FOUND:
-                crawler_options = Crawler(urls[index], [ResponseLoader.get_domain(urls[index])])
+                crawler_options = Crawler(seeds[index], [ResponseLoader.get_domain(seeds[index])], render_pages=render_pages)
             else:
-                crawler_options = Deserializer.deserialize(Crawler(urls[index], []), crawler_options_raw_data)
+                crawler_options = Deserializer.deserialize(Crawler(seeds[index], [], render_pages=render_pages), crawler_options_raw_data)
             yield crawler_options
 
-    def _build_target_url_table(self):
+    def _build_target_url_table(self) -> None:
         for url_data in self.config_data.get('target_urls', []):
             url = url_data.get('url')
 
             options = url_data.get('options', {})
-            # incase the options dict doesn't hava all the proper arguments instead of throwing a error we
+            # incase the options dict doesn't hava all the proper arguments instead of throwing an error we
             # build the rest of the options with specified default values
             self._target_url_table.update({url: ConfigLoader._build_options(url, options)})
 
     @staticmethod
-    def _build_options(url: str, options: Dict) -> Dict:
+    def _build_options(url: str, options: Dict) -> Dict[str, bool]:
         DEFAULT_OPTIONS = {'only_scrape_sub_pages': True, 'render_pages': False}
 
         for option in DEFAULT_OPTIONS:

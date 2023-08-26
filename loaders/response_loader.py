@@ -1,22 +1,23 @@
 import re
-
 import aiohttp
 import asyncio
 
 from dataclasses import dataclass
-from typing import Coroutine, Dict, AsyncGenerator, List, Set, Union, Tuple
+from typing import Coroutine, Dict, AsyncGenerator, List, Set, Tuple
+
+import playwright.async_api
 from aiohttp import ClientTimeout
 from urllib.parse import urlsplit, urlunsplit, urljoin
 from playwright.async_api import async_playwright, Browser
+
 from events.event_dispatcher import EventDispatcher, Event
+from utils.logger import LoggerLevel, Logger
 
 
 @dataclass
 class ResponseInformation:
     html: str
     status_code: int
-    had_error: bool = False
-    total_retries: int = 0
 
 
 class ResponseLoader:
@@ -30,6 +31,8 @@ class ResponseLoader:
 
     _response_lock = asyncio.Semaphore(_max_responses)
     _render_lock = asyncio.Semaphore(_max_renders)
+
+    _browser: Browser = None
 
     @staticmethod
     def setup(event_dispatcher: EventDispatcher) -> None:
@@ -57,69 +60,65 @@ class ResponseLoader:
         normalized_url = urlunsplit(normalized_components)
         return normalized_url
 
-    @staticmethod
-    async def get_rendered_response(browser: Browser, url: str, timeout_time: float = 20) -> ResponseInformation:
+    @classmethod
+    async def get_rendered_response(cls, url: str, timeout_time: float = 30) -> ResponseInformation:
         """
         Get the rendered HTML response content of a web page.
 
         Args:
-            browser (Browser): The Playwright browser instance.
             url (str): The URL of the web page.
-            timeout_time (float) Maximum operation time in seconds, defaults to 20 seconds
+            timeout_time (float) Maximum operation time in seconds, defaults to 30 seconds
 
         Returns:
             str: The rendered HTML content.
         """
+        browser = await cls._get_browser()
         timeout_time *= 1000
 
-        async with ResponseLoader._render_lock:
+        async with cls._render_lock:
             page = await browser.new_page()
             response = await page.goto(url, timeout=timeout_time)
             html = await response.text()
             await page.close()
+            Logger.console_log(f"Responses Received: URL={url}, Status={response.status}", LoggerLevel.INFO,
+                               include_time=True)
             return ResponseInformation(html, response.status)
 
-    @staticmethod
-    async def get_response(url: str, timeout_time: float = 20) -> ResponseInformation:
+    @classmethod
+    async def get_response(cls, url: str, timeout_time: float = 30) -> ResponseInformation:
         """
         Get the text response content of a web page.
 
         Args:
             url (str): The URL of the web page.
-            timeout_time (float) Maximum operation time in seconds, defaults to 20 seconds
+            timeout_time (float) Maximum operation time in seconds, defaults to 30 seconds
 
         Returns:
             str: The text response content.
         """
-        async with ResponseLoader._response_lock:
+        async with cls._response_lock:
             timeout = ClientTimeout(total=timeout_time)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url) as response:
                     html = await response.text()
+                    Logger.console_log(f"Responses Received: URL={url}, Status={response.status}", LoggerLevel.INFO,
+                                       include_time=True)
                     return ResponseInformation(html, response.status)
 
     @staticmethod
-    async def load_responses(*urls, render_pages: bool = False) -> Dict[str, Union[ResponseInformation, Exception]]:
-        results = {}
+    async def load_responses(*urls, render_pages: bool = False) -> Dict[str, ResponseInformation]:
         urls = set(urls)
 
-        html_responses = []
-        if render_pages:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                tasks = [ResponseLoader.get_rendered_response(browser, url) for url in urls]
-                async for result in ResponseLoader._generate_responses(tasks, urls):
-                    url, html = result
-                    html_responses.append({url: html.html})
-                    results.update({url: html})
+        response_method = ResponseLoader.get_rendered_response if render_pages \
+            else ResponseLoader.get_response
 
-                await browser.close()
-        else:
-            tasks = [(ResponseLoader.get_response(url)) for url in urls]
-            async for result in ResponseLoader._generate_responses(tasks, urls):
-                url, html = result
-                html_responses.append({url: html.html})
-                results.update({url: html})
+        html_responses = []
+        results = {}
+        tasks = [response_method(url) for url in urls]
+        async for result in ResponseLoader._generate_responses(tasks, urls):
+            url, html = result
+            html_responses.append({url: html.html})
+            results.update({url: html})
 
         ResponseLoader._event_dispatcher.trigger(Event("new_responses", "NEW_DATA", data=html_responses))
         return results
@@ -148,7 +147,8 @@ class ResponseLoader:
         return match.group(0)
 
     @staticmethod
-    async def _generate_responses(tasks: List[Coroutine[None, None, ResponseInformation]], urls: Set[str]) -> AsyncGenerator[Tuple[str, Union[ResponseInformation, Exception]], None]:
+    async def _generate_responses(tasks: List[Coroutine[None, None, ResponseInformation]], urls: Set[str]) -> \
+            AsyncGenerator[Tuple[str, ResponseInformation], None]:
         """
         Generate responses form a list of tasks and URLs.
 
@@ -162,4 +162,19 @@ class ResponseLoader:
         responses = await asyncio.gather(*tasks, return_exceptions=True)
 
         for url, response_info in zip(urls, responses):
+            if isinstance(response_info, Exception):
+                Logger.console_log(f"Responses Error: {response_info}", LoggerLevel.ERROR)
+                continue
             yield url, response_info
+
+    @classmethod
+    async def _get_browser(cls):
+        if cls._browser is None:
+            p = await async_playwright().start()
+            cls._browser = await p.chromium.launch()
+        return cls._browser
+
+    @staticmethod
+    async def close():
+        if ResponseLoader._browser:
+            await ResponseLoader._browser.close()

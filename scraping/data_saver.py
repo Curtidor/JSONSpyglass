@@ -29,7 +29,19 @@ class DataSaver:
             'database': self.save_database
         }
 
-    def setup(self):
+        self._clear_func_mapping = {
+            'csv': self.clear_csv
+        }
+
+    def setup(self, clear: bool = False) -> None:
+        if clear:
+            for save_type in self.save_types:
+                clear_func = self._clear_func_mapping.get(save_type)
+                if not clear_func:
+                    Logger.console_log(f"Unknown clear type: {save_type}", LoggerLevel.WARNING)
+                    continue
+                clear_func(self.save_config.get(save_type))
+
         for save_type in self.save_types:
             save_func = self._save_func_mapping.get(save_type)
 
@@ -53,6 +65,16 @@ class DataSaver:
                 continue
 
             save_func(self.save_config.get(save_type), data, len(self.data_keys))
+
+    @staticmethod
+    def clear_csv(clear_data: Dict[Any, Any]) -> None:
+        file_path = clear_data.get('file_path', 'bad_file_path')
+
+        if file_path == "bad_file_path":
+            raise SyntaxError("No file path was given for saving csv")
+
+        with open(file_path, "w") as file:
+            file.truncate(0)
 
     @staticmethod
     def save_csv(csv_options: Dict[Any, Any], data: Any, t_items: int) -> None:

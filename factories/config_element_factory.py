@@ -37,7 +37,6 @@ class ConfigElementFactory:
         }
 
         for element_type, element_data in generator:
-            target_pages = element_data.get('target_pages', 'any')
             element_id = element_data.get('id', 'invalid_id')
             element_name = element_data.get('name', 'no_ref_element')
 
@@ -49,7 +48,7 @@ class ConfigElementFactory:
                 if not css_selector:
                     raise SyntaxError(f'Improperly formatted element, missing css selector: {element_data}')
 
-                elements[element_type].append(SelectorElement(element_name, element_id, target_pages, css_selector))
+                elements[element_type].append(SelectorElement(element_name, element_id, css_selector))
 
             elif element_type == ConfigElementFactory.ELEMENT_TARGET:
                 tag = element_data.get('tag', "")
@@ -60,7 +59,7 @@ class ConfigElementFactory:
                     raise ValueError(
                         f'Improperly formatted element, you cannot specify a search hierarchy and, tags and attributes on the same element: {element_data}')
 
-                new_element = TargetElement(element_name, element_id, target_pages, tag, attrs)
+                new_element = TargetElement(element_name, element_id, tag, attrs)
 
                 if search_hierarchy:
                     search_hierarchy = TargetElement.format_search_hierarchy(search_hierarchy)
@@ -91,5 +90,3 @@ class ConfigElementFactory:
             element_data[event_type] = sorted_elements
 
         return element_data
-
-
