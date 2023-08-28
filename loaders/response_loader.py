@@ -1,88 +1,180 @@
-import asyncio
 import re
+import aiohttp
+import asyncio
 
-from typing import List, Tuple
-from requests_html import AsyncHTMLSession, HTMLResponse
+from dataclasses import dataclass
+from typing import Coroutine, Dict, AsyncGenerator, List, Set, Tuple
+
+import playwright.async_api
+from aiohttp import ClientTimeout
+from urllib.parse import urlsplit, urlunsplit, urljoin
+from playwright.async_api import async_playwright, Browser
 
 from events.event_dispatcher import EventDispatcher, Event
-from loaders.config_loader import ConfigLoader
-from utils.logger import Logger, LoggerLevel
+from utils.logger import LoggerLevel, Logger
 
 
-# TODO:
-#  add rotating proxy servers and rotating user agents
-#  fix this error when rendering: sys:1: RuntimeWarning: coroutine 'Launcher.killChrome' was never awaited
+@dataclass
+class ResponseInformation:
+    html: str
+    status_code: int
 
 
-class ResponsesLoader:
-    _hooks = {'response': Logger.console_log}
-    _user_agent = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-                                 "AppleWebKit/537.36 (KHTML, like Gecko)"
-                                 "Chrome/115.0.0.0 Safari/537.36"}
+class ResponseLoader:
+    """
+    A utility class for loading and processing web responses.
+    """
 
-    def __init__(self, config: ConfigLoader, event_dispatcher: EventDispatcher):
-        self.event_dispatcher = event_dispatcher
-        self.event_dispatcher.add_listener("new_urls", self.add_urls)
-        self.responses = []
+    _max_responses = 60
+    _max_renders = 5
+    _event_dispatcher: EventDispatcher = None
 
-        self._errors: List[str] = []
-        self._urls = config.get_target_urls()
-        self._domains_to_render = config.get_render_domains()
+    _response_lock = asyncio.Semaphore(_max_responses)
+    _render_lock = asyncio.Semaphore(_max_renders)
 
-        self._max_renders = 6
-        self._render_semaphore = asyncio.Semaphore(self._max_renders)
-
-    async def fetch_url(self, url: str, session: AsyncHTMLSession) -> tuple[str, bytes]:
-        async with self._render_semaphore:
-            response: HTMLResponse = await session.get(url, headers=ResponsesLoader._user_agent)
-
-            if response.status_code == 200:
-                Logger.console_log(f"Received response from: {url}", LoggerLevel.INFO, include_time=True)
-            else:
-                Logger.console_log(f"Bad response from: {url}, status code: [{response.status_code}]", LoggerLevel.ERROR, include_time=True)
-
-            if self._get_domain(url) in self._domains_to_render:
-                Logger.console_log(f"Rendering page: {url}", LoggerLevel.INFO, include_time=True)
-                await response.html.arender(timeout=10)
-
-            return url, response.content
-
-    async def fetch_multiple_urls(self) -> None:
-        responses = []
-        session = AsyncHTMLSession()
-
-        tasks = [self.fetch_url(url, session) for url in self._urls]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        await session.close()
-
-        for result in results:
-            if isinstance(result, Exception):
-                # results in this case will be the error information
-                Logger.console_log(f'Response error: {result}', LoggerLevel.WARNING)
-                self._add_error(f"ERROR: {result}")
-            else:
-                url, content = result
-                responses.append({url: content})
-
-        self._urls.clear()
-        self.responses = responses
-
-    async def collect_responses(self):
-        await self.fetch_multiple_urls()
-        await self.event_dispatcher.async_trigger(Event("new_responses", "loaded_responses_type", data=self.responses))
-
-    async def add_urls(self, event):
-        self._urls += event.data
-        await self.collect_responses()
-
-    def show_errors(self) -> None:
-        for error in self._errors:
-            print(error)
-
-    def _add_error(self, error: str) -> None:
-        self._errors.append(error)
+    _browser: Browser = None
 
     @staticmethod
-    def _get_domain(url: str) -> str:
-        return re.search(r'(?:https?://)?(?:www\.)?([^/]+)', url).group(1)
+    def setup(event_dispatcher: EventDispatcher) -> None:
+        ResponseLoader._event_dispatcher = event_dispatcher
+
+    @staticmethod
+    def normalize_url(url: str) -> str:
+        """
+        Normalize a URL.
+
+        Args:
+            url (str): The URL to be normalized.
+
+        Returns:
+            str: The normalized URL.
+        """
+        components = urlsplit(url)
+        normalized_components = [
+            components.scheme.lower(),
+            components.netloc.lower(),
+            components.path,
+            components.query,
+            components.fragment
+        ]
+        normalized_url = urlunsplit(normalized_components)
+        return normalized_url
+
+    @classmethod
+    async def get_rendered_response(cls, url: str, timeout_time: float = 30) -> ResponseInformation:
+        """
+        Get the rendered HTML response content of a web page.
+
+        Args:
+            url (str): The URL of the web page.
+            timeout_time (float) Maximum operation time in seconds, defaults to 30 seconds
+
+        Returns:
+            str: The rendered HTML content.
+        """
+        browser = await cls._get_browser()
+        timeout_time *= 1000
+
+        async with cls._render_lock:
+            page = await browser.new_page()
+            response = await page.goto(url, timeout=timeout_time)
+            html = await response.text()
+            await page.close()
+            Logger.console_log(f"Responses Received: URL={url}, Status={response.status}", LoggerLevel.INFO,
+                               include_time=True)
+            return ResponseInformation(html, response.status)
+
+    @classmethod
+    async def get_response(cls, url: str, timeout_time: float = 30) -> ResponseInformation:
+        """
+        Get the text response content of a web page.
+
+        Args:
+            url (str): The URL of the web page.
+            timeout_time (float) Maximum operation time in seconds, defaults to 30 seconds
+
+        Returns:
+            str: The text response content.
+        """
+        async with cls._response_lock:
+            timeout = ClientTimeout(total=timeout_time)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as response:
+                    html = await response.text()
+                    Logger.console_log(f"Responses Received: URL={url}, Status={response.status}", LoggerLevel.INFO,
+                                       include_time=True)
+                    return ResponseInformation(html, response.status)
+
+    @staticmethod
+    async def load_responses(*urls, render_pages: bool = False) -> Dict[str, ResponseInformation]:
+        urls = set(urls)
+
+        response_method = ResponseLoader.get_rendered_response if render_pages \
+            else ResponseLoader.get_response
+
+        html_responses = []
+        results = {}
+        tasks = [response_method(url) for url in urls]
+        async for result in ResponseLoader._generate_responses(tasks, urls):
+            url, html = result
+            html_responses.append({url: html.html})
+            results.update({url: html})
+
+        ResponseLoader._event_dispatcher.trigger(Event("new_responses", "NEW_DATA", data=html_responses))
+        return results
+
+    @staticmethod
+    def build_link(base_url: str, href: str) -> str:
+        """
+        Build a full URL from a base URL and a relative href.
+
+        Args:
+            base_url (str): The base URL.
+            href (str): The relative href.
+
+        Returns:
+            str: The full URL.
+        """
+        if not href:
+            return ""
+
+        return ResponseLoader.normalize_url(urljoin(base_url, href))
+
+    @staticmethod
+    def get_domain(url: str) -> str:
+        # if a bad url is give and no match if found an error is thrown
+        match = re.search(r'https?://([^/]+)', url)
+        return match.group(0)
+
+    @staticmethod
+    async def _generate_responses(tasks: List[Coroutine[None, None, ResponseInformation]], urls: Set[str]) -> \
+            AsyncGenerator[Tuple[str, ResponseInformation], None]:
+        """
+        Generate responses form a list of tasks and URLs.
+
+        Args:
+            tasks (List[Coroutine[Any, Any, str]]): List of tasks to generate responses.
+            urls (List[str]): List of URLs corresponding to the tasks.
+
+        Yields:
+            Generator[Any, Any, Dict[str, str]]: A generator yielding dictionaries mapping URLs to their response content.
+        """
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for url, response_info in zip(urls, responses):
+            if isinstance(response_info, Exception):
+                Logger.console_log(f"Responses Error: {response_info}", LoggerLevel.ERROR)
+                continue
+            yield url, response_info
+
+    @classmethod
+    async def _get_browser(cls):
+        if cls._browser is None:
+            p = await async_playwright().start()
+            cls._browser = await p.chromium.launch()
+        return cls._browser
+
+    @staticmethod
+    async def close():
+        if ResponseLoader._browser:
+            await ResponseLoader._browser.close()

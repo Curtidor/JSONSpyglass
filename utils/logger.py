@@ -76,8 +76,3 @@ class Logger:
         """
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return current_time
-
-
-if __name__ == "__main__":
-    Logger.console_log("LMAO", LoggerLevel.ERROR)
-    Logger.file_log('../../DataScraper/debug_output/output.text', "TEST", LoggerLevel.INFO, include_time=True)

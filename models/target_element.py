@@ -48,6 +48,20 @@ class TargetElement(ConfigElement):
 
         return attr
 
+    @staticmethod
+    def format_search_hierarchy(attrs: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        hierarchy = []
+        for attr in attrs:
+            name = attr.get('name')
+            value = attr.get('value')
+
+            if not name or not value:
+                raise ValueError(f"improperly formatted search hierarchy, missing name or value: {attrs}")
+
+            hierarchy.append({name: value})
+
+        return hierarchy
+
     def create_search_hierarchy_from_attributes(self):
         """
         Creates a search hierarchy based on the current attributes.
