@@ -1,25 +1,38 @@
+import asyncio
+
 from scraping.data_parser import DataParser
 from events.event_dispatcher import EventDispatcher
 from loaders.config_loader import ConfigLoader
-from loaders.response_loader import ResponsesLoader
-from scraping.data_scaper import DataScraper
-from scraping.page_navigator import PageNavigator
+from loaders.response_loader import ResponseLoader
+from scraping.data_saver import DataSaver
+from scraping.data_scraper import DataScraper
 from factories.config_element_factory import ConfigElementFactory
-print("STARING..")
-
-event_dispatcher = EventDispatcher(debug_mode=False)
 
 
-config = ConfigLoader('configs/scrape_this_site_sandbox/countries_of_the_world.json')
+async def main():
+    print("STARTING..")
 
-responses_loader = ResponsesLoader(config, event_dispatcher)
+    event_dispatcher = EventDispatcher(debug_mode=True)
+    event_dispatcher.start()
 
-elements = ConfigElementFactory.create_elements(config.get_raw_target_elements())
-ds = DataScraper(config, elements, event_dispatcher, 10)
-dp = DataParser(config, event_dispatcher)
-pg = PageNavigator(config.get_raw_global_page_navigator_data(), event_dispatcher)
+    config = ConfigLoader('configs/books.toscrape.com.json')
 
-# this will start everything by getting the initial responses
-responses_loader.collect_responses()
+    elements = ConfigElementFactory.create_elements(config.get_raw_target_elements(), config.get_data_order())
 
-print("END...")
+    data_saver = DataSaver(config.get_saving_data(), config.get_data_order())
+    data_saver.setup(clear=True)
+
+    DataScraper(config, elements, event_dispatcher)
+    DataParser(config, event_dispatcher, data_saver)
+
+    ResponseLoader.setup(event_dispatcher=event_dispatcher)
+
+    for crawler in config.get_crawlers():
+        crawler.start()
+        await crawler.exit()
+
+    await ResponseLoader.close()
+    print("END...")
+
+if __name__ == "__main__":
+    asyncio.run(main())

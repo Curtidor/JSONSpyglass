@@ -1,0 +1,43 @@
+{
+  "target_urls": [
+    {
+      "url": "https://www.scrapethissite.com/pages/ajax-javascript/",
+      "options": {
+        "only_scrape_sub_pages": true,
+        "render_pages": true
+      },
+      "crawler": {
+        "ignore_robots_txt": true,
+        "crawl_delay": 0.01,
+        "max_depth": 0,
+        "allowed_domains": ["www.scrapethissite.com"]
+      }
+    }
+  ],
+  "elements": [
+    {
+      "name": "Title",
+      "search_hierarchy": [
+        {
+          "name": "class",
+          "value": "film"
+        },
+        {
+          "name": "class",
+          "value": "film-title"
+        }
+      ],
+      "data_parsing": {
+        "collect_text": true
+      }
+    }
+  ],
+  "data_saving": {
+    "csv": {
+      "enabled": true,
+      "file_path": "Oscar Winning Films.csv",
+      "orientation": "vertical"
+    }
+  },
+  "data_order": ["Title"]
+}
