@@ -21,13 +21,13 @@ async def main():
 
     data_saver = DataSaver(config.get_saving_data(), config.get_data_order())
     data_saver.setup(clear=True)
-    data_scraper = DataScraper(config, elements, event_dispatcher)
-    data_parser = DataParser(config, event_dispatcher, data_saver)
+
+    DataScraper(config, elements, event_dispatcher)
+    DataParser(config, event_dispatcher, data_saver)
 
     ResponseLoader.setup(event_dispatcher=event_dispatcher)
 
-    for url, crawler in config.get_setup_information():
-        print("RUNNING CRAWLER")
+    for crawler in config.get_crawlers():
         crawler.start()
         await crawler.exit()
 

@@ -1,4 +1,4 @@
-from typing import List, Dict, Generator, Union, Any
+from typing import List, Dict, Union
 from bs4 import BeautifulSoup, ResultSet
 
 from events.event_dispatcher import EventDispatcher, Event
@@ -8,7 +8,10 @@ from factories.config_element_factory import ConfigElementFactory, TargetElement
 
 
 class DataScraper:
-    def __init__(self, config: ConfigLoader, elements: Dict[str, List[TargetElement | SelectorElement]], event_dispatcher: EventDispatcher):
+    def __init__(self,
+                 config: ConfigLoader,
+                 elements: List[Union[SelectorElement, TargetElement]],
+                 event_dispatcher: EventDispatcher):
         """
         Initialize the DataScraper class.
 
@@ -49,20 +52,20 @@ class DataScraper:
             if self.config.only_scrape_sub_pages(url):
                 continue
 
-            for element_type, element_data in self.elements.items():
-                if not element_data:
+            for element in self.elements:
+                if not element:
                     continue
-                results.extend(self._collect_elements(url, element_type, soup, element_data))
+                results.append(self._collect_scraped_data(url, soup, element))
 
         return results
 
-    def _collect_elements(self, url: str, element_type: str, soup: BeautifulSoup, element_data: List[Union[TargetElement, SelectorElement]]) -> Generator[ScrapedData, Any, Any]:
-        for element in element_data:
-            if element_type == ConfigElementFactory.ELEMENT_SELECTOR:
-                data = self._collect_all_selector_elements(url, element, soup)
-            else:
-                data = self._collect_all_target_elements(url, element, soup)
-            yield data
+    def _collect_scraped_data(self, url: str, soup: BeautifulSoup, element: Union[TargetElement, SelectorElement]) -> ScrapedData:
+        if element.element_type == ConfigElementFactory.ELEMENT_SELECTOR:
+            data = self._collect_all_selector_elements(url, element, soup)
+        else:
+            data = self._collect_all_target_elements(url, element, soup)
+
+        return data
 
     @staticmethod
     def _collect_all_target_elements(url: str, target_element: TargetElement, soup: BeautifulSoup) -> ScrapedData:

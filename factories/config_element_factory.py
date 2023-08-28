@@ -1,4 +1,4 @@
-from typing import Generator, List, Dict, Tuple, Any
+from typing import Generator, List, Dict, Tuple, Any, Union
 
 from models.selector_element import SelectorElement
 from models.target_element import TargetElement
@@ -11,7 +11,7 @@ class ConfigElementFactory:
 
     @staticmethod
     def create_elements(generator: Generator[Tuple[str, Dict[Any, Any]], None, None], data_order: List[str]) \
-            -> Dict[str, List[SelectorElement | TargetElement]]:
+            -> List[Union[SelectorElement, TargetElement]]:
         """
         Creates elements based on the provided generator.
 
@@ -19,7 +19,7 @@ class ConfigElementFactory:
         :param data_order: the order elements should be in
 
         returns:
-            Dict[str, List[SelectorElement | TargetElement]]: Dictionary containing created elements.
+            List[Union[SelectorElement, TargetElement]]: List containing created and sorted elements.
         """
 
         elements = ConfigElementFactory._create_elements(generator)
@@ -29,12 +29,9 @@ class ConfigElementFactory:
 
     @staticmethod
     def _create_elements(generator: Generator[Tuple[str, Dict[Any, Any]], None, None]) \
-            -> Dict[str, List[SelectorElement | TargetElement]]:
+            -> List[Union[SelectorElement, TargetElement]]:
 
-        elements: Dict[str, List[Any]] = {
-            ConfigElementFactory.ELEMENT_SELECTOR: [],
-            ConfigElementFactory.ELEMENT_TARGET: []
-        }
+        elements = []
 
         for element_type, element_data in generator:
             element_id = element_data.get('id', 'invalid_id')
@@ -48,7 +45,7 @@ class ConfigElementFactory:
                 if not css_selector:
                     raise SyntaxError(f'Improperly formatted element, missing css selector: {element_data}')
 
-                elements[element_type].append(SelectorElement(element_name, element_id, css_selector))
+                elements.append(SelectorElement(element_name, element_type, element_id, css_selector))
 
             elif element_type == ConfigElementFactory.ELEMENT_TARGET:
                 tag = element_data.get('tag', "")
@@ -59,7 +56,7 @@ class ConfigElementFactory:
                     raise ValueError(
                         f'Improperly formatted element, you cannot specify a search hierarchy and, tags and attributes on the same element: {element_data}')
 
-                new_element = TargetElement(element_name, element_id, tag, attrs)
+                new_element = TargetElement(element_name, element_type, element_id, tag, attrs)
 
                 if search_hierarchy:
                     search_hierarchy = TargetElement.format_search_hierarchy(search_hierarchy)
@@ -68,7 +65,7 @@ class ConfigElementFactory:
                     new_element.create_attributes_from_search_hierarchy()
                 else:
                     new_element.create_search_hierarchy_from_attributes()
-                elements[element_type].append(new_element)
+                elements.append(new_element)
 
             else:
                 raise ValueError(
@@ -77,16 +74,6 @@ class ConfigElementFactory:
         return elements
 
     @staticmethod
-    def _sort_elements(element_data: Dict[str, List[SelectorElement | TargetElement]], data_order: List[str]) \
-            -> Dict[str, List[SelectorElement | TargetElement]]:
-
-        if not data_order:
-            return element_data
-
-        for event_type in element_data:
-            elements = element_data[event_type]
-            sorted_elements = sorted(elements, key=lambda x: data_order.index(x.name))
-
-            element_data[event_type] = sorted_elements
-
-        return element_data
+    def _sort_elements(element_selectors: List[Union[SelectorElement, TargetElement]], data_order: List[str]) -> None:
+        # Sort the element_selectors list based on the order in data_order
+        element_selectors.sort(key=lambda x: data_order.index(x.name))

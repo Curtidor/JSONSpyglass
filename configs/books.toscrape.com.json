@@ -53,5 +53,5 @@
       "orientation": "vertical"
     }
   },
-  "data_order": ["Book Name", "Book Price", "Stock"]
+  "data_order": ["Stock","Book Name", "Book Price"]
 }
