@@ -1,11 +1,13 @@
 import asyncio
 import re
 
-from typing import List, Generator, Any, Union, Dict
+from asyncio import Queue
+from typing import List, Any, Generator, AsyncGenerator, Iterable
 from urllib.robotparser import RobotFileParser
-from selectolax.parser import HTMLParser
 
-from loaders.response_loader import ResponseLoader, ResponseInformation
+from loaders.response_loader import ResponseLoader, ScrapedResponse
+from utils.logger import LoggerLevel, Logger
+from .page_manager import BrowserManager
 
 
 class Crawler:
@@ -43,18 +45,17 @@ class Crawler:
         self.url_patterns = url_patters
 
         self._current_depth = 0
+        self._loop = None
         self._to_visit = set()
         self._visited = set()
-        self._loop = None
+        self._clicked_elements = set()
         self._running_tasks = set()
+        self._elements_to_click = Queue()
 
         # robot.txt parser
         self._robot_parser = RobotFileParser()
         self._robot_parser.set_url(self._get_robot_txt_url())
         self._robot_parser.read()
-
-        # debug variables
-        self._total_link_build_attempts = 0
 
         # set event loop
         self._set_event_loop(loop=loop)
@@ -76,6 +77,7 @@ class Crawler:
         if not self.ignore_robots_txt:
             crawl_delay = self._robot_parser.crawl_delay(self.user_agent)
             self.crawl_delay = crawl_delay if crawl_delay else self.crawl_delay
+
         self._to_visit.add(self.seed)
         task = self._loop.create_task(self._run())
         self._running_tasks.add(task)
@@ -86,25 +88,50 @@ class Crawler:
         """
         await asyncio.gather(*self._running_tasks)
         print("TOTAL SITES VISITED:", len(self._visited))
-        print("TOTAL ATTEMPTED LINK BUILDS:", self._total_link_build_attempts)
         print("SITES TO VISIT:", len(self._to_visit))
 
-    def extract_links(self, base_url: str, html: str) -> Generator[str, Any, Any]:
-        """
-        Extract hrefs from the HTML and try to build URLs from them.
+    def collect_urls(self, urls: Iterable[str], scraped_responses: Iterable[ScrapedResponse]) \
+            -> Generator[str, Any, Any]:
+        for base_url, response in zip(urls, scraped_responses):
+            for href in ResponseLoader.get_hrefs_from_html(response.html):
+                child_url = ResponseLoader.build_link(base_url, href)
+                if child_url not in self._visited and self._is_url_allowed(child_url):
+                    yield child_url
+                self._visited.add(child_url)
 
-        Args:
-            base_url (str): The base URL of the HTML page.
-            html (str): The HTML content to extract links from.
-
-        Yields:
-            str: The extracted URLs.
+    async def scrape_dynamic_ajax_content(self) -> AsyncGenerator[ScrapedResponse, Any]:
         """
-        parser = HTMLParser(html)
-        for a_tag in parser.css("a"):
-            href = a_tag.attributes.get("href")
-            self._total_link_build_attempts += 1
-            yield ResponseLoader.build_link(base_url, href)
+        Scrapes dynamic content by clicking on specified elements triggering AJAX requests
+        and then waiting for the requests to finish before collecting data.
+
+        This function clicks on specific elements, waits for AJAX requests to complete,
+        and then gathers data from the loaded pages.
+        """
+        pages_to_close = []  # List to store pages that need to be closed
+
+        # Iterate through the elements to click in the queue
+        while not self._elements_to_click.empty():
+            page_info: ScrapedResponse = await self._elements_to_click.get()
+
+            # Iterate through href elements and click them
+            for click_element in page_info.href_elements:
+                await click_element.click()
+
+                responses = await ResponseLoader.load_responses(page_info.page.url, render_pages=True)
+                # we can get the first value of the dict as we are only sending out 1 url, so we will only get 1 response
+                response = next(iter(responses.values()))
+                # if there are no elements to click we can close the page
+                # as its no longer need
+                if not response.href_elements:
+                    pages_to_close.append(response.page)
+
+                yield response
+
+            # Mark the element as processed
+            self._elements_to_click.task_done()
+
+        # Close all opened pages using asyncio.gather
+        await asyncio.gather(*[BrowserManager.close_page(page, feed_into_pool=True) for page in pages_to_close])
 
     async def _run(self):
         """
@@ -113,41 +140,50 @@ class Crawler:
 
         new_urls = set()
         while self._to_visit and self._current_depth <= self.max_depth:
+            Logger.console_log(f"DEPTH {self._current_depth}", LoggerLevel.INFO)
             if self.has_crawl_delay:
                 # If there's a crawl delay, process URLs one at a time
                 # by popping a URL from the _to_visit set
-                response_pairs = await ResponseLoader.load_responses(self._to_visit.pop(), render_pages=self.render_pages)
+                response_pairs = await ResponseLoader.load_responses(self._to_visit.pop(),
+                                                                     render_pages=self.render_pages)
                 await asyncio.sleep(self.crawl_delay)
             else:
                 # If no crawl delay, process all URLs at once
                 response_pairs = await ResponseLoader.load_responses(*self._to_visit, render_pages=self.render_pages)
                 self._to_visit.clear()
 
-            for url in self._process_responses(response_pairs):
-                if url not in self._visited and self._is_url_allowed(url):
-                    self._visited.add(url)
-                    new_urls.add(url)
+            for url, response_info in response_pairs.items():
+                self._visited.add(url)
+                # if there are elements that need to be clicked
+                if response_info.href_elements:
+                    self._elements_to_click.put_nowait(response_info)
+                elif self.render_pages and not response_info.href_elements:
+                    await BrowserManager.close_page(response_info.page, feed_into_pool=True)
+
+            new_urls.update(self.collect_urls(response_pairs.keys(), response_pairs.values()))
+
+            if self.render_pages:
+                responses_to_click_through = []
+                async for response in self.scrape_dynamic_ajax_content():
+                    self._visited.add(response.url)
+                    # if there are href elements we need to keep the page open
+                    if response.href_elements:
+                        responses_to_click_through.append(response)
+                    # else we can return the page to the pool
+                    else:
+                        await BrowserManager.close_page(response.page, feed_into_pool=True)
+                    new_urls.update(self.collect_urls([response.url], [response]))
+                for response_to_click_through in responses_to_click_through:
+                    if response_to_click_through.url in self._visited:
+                        await BrowserManager.close_page(response_to_click_through.page, feed_into_pool=True)
+                        continue
+                    self._elements_to_click.put_nowait(response_to_click_through)
 
             if not self._to_visit:
                 # Once we have processed all the URLs in _to_visit, copy over all the new URLs and increase the depth
                 self._to_visit.update(new_urls)
                 self._current_depth += 1
                 new_urls.clear()
-
-    def _process_responses(self, responses: Dict[str, Union[ResponseInformation, BaseException]]) -> Generator[str, Any, Any]:
-        """
-        Process the responses and yield extracted URLs.
-
-        Args:
-            responses (Dict[str, Union[ResponseInformation, BaseException]]): A dictionary of URLs mapped to responses or exceptions.
-
-        Yields:
-            str: Extracted URLs.
-        """
-        for url, response_info in responses.items():
-            self._visited.add(url)
-            for new_url in self.extract_links(url, response_info.html):
-                yield new_url
 
     def _set_event_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         """
@@ -178,7 +214,10 @@ class Crawler:
 
     def _is_url_allowed(self, url: str) -> bool:
         # if rule patterns are defined and the url does not match any pattern return false
-        if self.url_patterns and not any([url_pattern for url_pattern in self.url_patterns if re.search(url_pattern, url)]):
+        if self.url_patterns and not any(
+                [url_pattern for url_pattern in self.url_patterns if re.search(url_pattern, url)]):
+            return False
+        if ResponseLoader.get_domain(url) not in self.allowed_domains:
             return False
         if self.ignore_robots_txt:
             return True

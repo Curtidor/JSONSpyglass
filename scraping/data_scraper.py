@@ -17,7 +17,7 @@ class DataScraper:
 
         Args:
             config (ConfigLoader): The configuration loader.
-            elements (dict): Dictionary containing lists of target or selector elements.
+            elements (dict): List containing lists of target or selector elements.
             event_dispatcher (EventDispatcher): An EventDispatcher instance used for event handling.
         """
         self.config = config

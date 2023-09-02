@@ -12,7 +12,7 @@ from factories.config_element_factory import ConfigElementFactory
 async def main():
     print("STARTING..")
 
-    event_dispatcher = EventDispatcher(debug_mode=True)
+    event_dispatcher = EventDispatcher(debug_mode=False)
     event_dispatcher.start()
 
     config = ConfigLoader('configs/books.toscrape.com.json')
@@ -25,13 +25,12 @@ async def main():
     DataScraper(config, elements, event_dispatcher)
     DataParser(config, event_dispatcher, data_saver)
 
-    ResponseLoader.setup(event_dispatcher=event_dispatcher)
+    await ResponseLoader.setup(event_dispatcher=event_dispatcher)
 
     for crawler in config.get_crawlers():
         crawler.start()
         await crawler.exit()
 
-    await ResponseLoader.close()
     print("END...")
 
 if __name__ == "__main__":
