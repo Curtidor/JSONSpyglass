@@ -35,7 +35,7 @@
   "data_saving": {
     "csv": {
       "enabled": true,
-      "file_path": "Oscar Winning Films.csv",
+      "file_path": "scraper_out_put/Oscar Winning Films.csv",
       "orientation": "vertical"
     }
   },
