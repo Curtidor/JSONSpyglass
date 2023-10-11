@@ -11,6 +11,7 @@ class EventDispatcher:
     """
     EventDispatcher handles event listeners, triggers events, and manages asynchronous execution of listeners.
     """
+    UNLIMITED_RESPONDERS = -1
 
     _busy_listeners: Set['Callable'] = set()
 
@@ -43,7 +44,7 @@ class EventDispatcher:
 
         # wait for all events in the queue to be processed
         while self._event_queue.qsize():
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.15)
 
         tasks = []
         for task in asyncio.all_tasks(loop=self._event_loop):
@@ -104,16 +105,14 @@ class EventDispatcher:
 
         responses = 0
         for listener in self._listeners[event.event_name]:
-            if self.debug_mode:
-                Logger.console_log(f"calling: [{listener.callback.__name__}] from event: [{event.event_name}]",
-                                   LoggerLevel.INFO, include_time=True)
-
-            if event.max_responders == -1 or responses < event.max_responders:
-                listener.callback(event, *args, **kwargs)
-                responses += 1
-            # max responses reached exit the function
-            else:
+            if event.max_responders != EventDispatcher.UNLIMITED_RESPONDERS and responses >= event.max_responders:
                 return
+
+            if self.debug_mode:
+                self._log_listener_call(listener, event, False)
+
+            listener.callback(event, *args, **kwargs)
+            responses += 1
 
     async def async_trigger(self, event: Event, *args: Any, **kwargs: Any) -> None:
         """
@@ -139,11 +138,19 @@ class EventDispatcher:
             return
 
         listeners = self._listeners.get(event.event_name, [])
-        max_responders = event.max_responders if event.max_responders != -1 else len(listeners)
 
-        await asyncio.gather(*[self._run_listener(listener, event, *args, **kwargs) for listener in listeners[:max_responders]])
+        # Determine the maximum number of responders to process.
+        # If event.max_responders is not set to an unlimited amount of responders,
+        # use the max_responders value specified in the event. Otherwise, set the
+        # value to the total number of listeners for this event.
+        max_responders = event.max_responders if event.max_responders != EventDispatcher.UNLIMITED_RESPONDERS else len(
+            listeners)
 
-    async def _run_listener(self, listener: EventListener, event: Event, *args, **kwargs):
+        # Asynchronously execute listeners for the event.
+        await asyncio.gather(
+            *[self._run_async_listener(listener, event, *args, **kwargs) for listener in listeners[:max_responders]])
+
+    async def _run_async_listener(self, listener: EventListener, event: Event, *args, **kwargs):
         """
         Asynchronously run the specified listener for the given event.
 
@@ -153,14 +160,7 @@ class EventDispatcher:
         :param kwargs: Additional keyword arguments to pass to the listener.
         """
         if self.debug_mode:
-            Logger.console_log(
-                f"async calling: [{listener.callback.__name__}] from event: [{event.event_name}]",
-                LoggerLevel.INFO, include_time=True)
-
-            if listener.callback in self._busy_listeners:
-                Logger.console_log(
-                    f"skipping call to: [{listener.callback.__name__}] as its busy",
-                    LoggerLevel.INFO, include_time=True)
+            self._log_listener_call(listener, event, True)
 
         if listener.callback not in self._busy_listeners or event.allow_busy_trigger:
             self._busy_listeners.add(listener.callback)
@@ -222,7 +222,8 @@ class EventDispatcher:
         """
         if event_name not in self._listeners:
             return
-        self._listeners[event_name] = sorted(self._listeners[event_name], key=lambda event_listener: event_listener.priority.value)
+        self._listeners[event_name] = sorted(self._listeners[event_name],
+                                             key=lambda event_listener: event_listener.priority.value)
 
     def _remove_busy_listener(self, callback: Callable) -> None:
         """
@@ -232,6 +233,27 @@ class EventDispatcher:
         """
         if callback in self._busy_listeners:
             self._busy_listeners.remove(callback)
+
+    @classmethod
+    def _log_listener_call(cls, listener: EventListener, event: Event, is_async: bool) -> None:
+        """
+        Log the invocation of an event listener, including whether it's synchronous or asynchronous.
+
+        :param listener: The event listener being invoked.
+        :param event: The event associated with the listener.
+        :param is_async: True if the listener is asynchronous; False if synchronous.
+        """
+        message_front = "async calling" if is_async else "calling"
+
+        Logger.console_log(
+            f"{message_front}: [{listener.callback.__name__}] from event: [{event.event_name}]",
+            LoggerLevel.INFO, include_time=True
+        )
+
+        if is_async and listener.callback in cls._busy_listeners:
+            Logger.console_log(
+                f"skipping call to: [{listener.callback.__name__}] as it's busy",
+                LoggerLevel.INFO, include_time=True)
 
     async def _event_loop_runner(self):
         """

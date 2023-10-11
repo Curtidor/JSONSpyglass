@@ -16,6 +16,7 @@ from utils.logger import LoggerLevel, Logger
 # TODO
 # address the page loading and pool bugs
 
+
 @dataclass
 class ScrapedResponse:
     html: str
@@ -31,6 +32,7 @@ class RenderStateRetry(Enum):
     INITIAL = 0,
     LOAD_STATE_TIMEOUT = 1,
     REQUEST_FINISHED_EVENT_TIMEOUT = 2
+
 
 class ResponseLoader:
     """
@@ -81,15 +83,15 @@ class ResponseLoader:
         Get the rendered HTML response content of a web page.
 
         Args:
-            url (str): The URL of the web page.
-            timeout_time (float) Maximum operation time in seconds, defaults to 30 seconds
+          url (str): The URL of the web page.
+          timeout_time (float): Maximum operation time in seconds (default is 30 seconds).
 
         Returns:
-            str: The rendered HTML content.
+          ScrapedResponse: A response object containing the rendered HTML content and additional information.
 
         Note:
-            If href elements are returned the page is not closed and the caller will be responsible for managing
-            the pages lifetime
+          If href elements are returned, the page is not closed, and the caller is responsible for managing
+          the page's lifetime.
         """
         timeout_time *= 1000
 
@@ -106,7 +108,6 @@ class ResponseLoader:
 
             page.on("requestfinished", request_finished_callback)
 
-            html = ""
             try:
                 await asyncio.wait_for(
                     asyncio.gather(
@@ -116,25 +117,36 @@ class ResponseLoader:
                     timeout=timeout_time / 1000  # Convert back to seconds
                 )
             except asyncio.TimeoutError as te:
-                print("TIME OUT ERROR WHEN WAITING FOR LOAD STATES:", te)
+                Logger.console_log(
+                    f"TIME OUT ERROR WHEN WAITING FOR [load state]: {te}\n"
+                    f"URL: {url}",
+                    LoggerLevel.WARNING,
+                    include_time=True
+                )
 
+            html = ""
             try:
                 # Wait for the content_future with a timeout
                 html = await asyncio.wait_for(content_future, timeout=timeout_time / 1000)
             except asyncio.TimeoutError as te:
-                print("TIME OUT ERROR WHEN WAITING FOR [request finished] event:", te)
+                Logger.console_log(
+                    f"TIME OUT ERROR WHEN WAITING FOR [request finished] event: {te}\n"
+                    f"URL: {url}",
+                    LoggerLevel.WARNING,
+                    include_time=True
+                )
             finally:
                 page.remove_listener("requestfinished", request_finished_callback)
 
             hrefs_elements = await cls.collect_hrefs_with_elements(page)
 
+            # if the page has no element dependencies we can close it
             if not hrefs_elements:
                 await BrowserManager.close_page(page, feed_into_pool=True)
 
             # fallback when we couldn't render the page and extract the html
             if not html:
                 html = await page.content()
-                return ScrapedResponse(html, response.status, href_elements=hrefs_elements, page=page, url=url)
 
             return ScrapedResponse(html, response.status, href_elements=hrefs_elements, page=page, url=url)
 
@@ -156,12 +168,24 @@ class ResponseLoader:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url) as response:
                     html = await response.text()
-                    Logger.console_log(f"Responses Received: URL={url}, Status={response.status}", LoggerLevel.INFO)
-
                     return ScrapedResponse(html, response.status, url=url)
 
     @classmethod
     async def load_responses(cls, *urls, render_pages: bool = False) -> Dict[str, ScrapedResponse]:
+        """
+        Load and retrieve responses from the specified URLs.
+
+        Args:
+            *urls: Variable-length arguments representing the URLs to load responses from.
+            render_pages (bool): Whether to render pages with JavaScript (default is False).
+
+        Returns:
+            Dict[str, ScrapedResponse]: A dictionary containing the loaded responses indexed by URL.
+
+        Note:
+            This method loads responses from the provided URLs. If rendering pages is enabled, it will render pages
+            with JavaScript. The method triggers a "new_responses" event with the loaded response data.
+        """
         urls = set(urls)
         response_method = cls.get_rendered_response if render_pages \
             else cls.get_response
