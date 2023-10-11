@@ -2,6 +2,7 @@ import aiohttp
 import asyncio
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Coroutine, Dict, AsyncGenerator, List, Set, Tuple, Generator, Any
 from aiohttp import ClientTimeout
 from urllib.parse import urlsplit, urlunsplit, urljoin, urlparse
@@ -12,6 +13,8 @@ from events.event_dispatcher import EventDispatcher, Event
 from scraping.page_manager import BrowserManager
 from utils.logger import LoggerLevel, Logger
 
+# TODO
+# address the page loading and pool bugs
 
 @dataclass
 class ScrapedResponse:
@@ -21,6 +24,13 @@ class ScrapedResponse:
     href_elements: List[ElementHandle] = None
     page: Page = None
 
+
+# this if for a future feature where we can try to get different states of a page event
+# when previous ones failed
+class RenderStateRetry(Enum):
+    INITIAL = 0,
+    LOAD_STATE_TIMEOUT = 1,
+    REQUEST_FINISHED_EVENT_TIMEOUT = 2
 
 class ResponseLoader:
     """
@@ -96,6 +106,7 @@ class ResponseLoader:
 
             page.on("requestfinished", request_finished_callback)
 
+            html = ""
             try:
                 await asyncio.wait_for(
                     asyncio.gather(
@@ -119,6 +130,11 @@ class ResponseLoader:
 
             if not hrefs_elements:
                 await BrowserManager.close_page(page, feed_into_pool=True)
+
+            # fallback when we couldn't render the page and extract the html
+            if not html:
+                html = await page.content()
+                return ScrapedResponse(html, response.status, href_elements=hrefs_elements, page=page, url=url)
 
             return ScrapedResponse(html, response.status, href_elements=hrefs_elements, page=page, url=url)
 
@@ -147,7 +163,6 @@ class ResponseLoader:
     @classmethod
     async def load_responses(cls, *urls, render_pages: bool = False) -> Dict[str, ScrapedResponse]:
         urls = set(urls)
-
         response_method = cls.get_rendered_response if render_pages \
             else cls.get_response
 
