@@ -104,7 +104,7 @@ class Crawler:
             scraped_responses (Iterable[ScrapedResponse]): Iterable of scraped responses.
 
         Yields:
-            str: URLs that meet the specified conditions.
+            str:  URLs that meet the specified conditions.
         """
 
         for base_url, response in zip(urls, scraped_responses):
