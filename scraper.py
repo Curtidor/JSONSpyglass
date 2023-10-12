@@ -17,8 +17,8 @@ async def main():
     event_dispatcher = EventDispatcher(debug_mode=True)
     event_dispatcher.start()
 
-    config = ConfigLoader('configs/books.toscrape.com.json')
-    # config = ConfigLoader('configs/scrap_this_site.com/Oscar_Winning_Films_AJAX_and_Javascript.json')
+    # config = ConfigLoader('configs/books.toscrape.com.json')
+    config = ConfigLoader('configs/scrap_this_site.com/Oscar_Winning_Films_AJAX_and_Javascript.json')
 
     elements = ConfigElementFactory.create_elements(config.get_raw_target_elements(), config.get_data_order())
 
@@ -28,7 +28,7 @@ async def main():
     DataScraper(config, elements, event_dispatcher)
     DataParser(config, event_dispatcher, data_saver)
 
-    await ResponseLoader.setup(event_dispatcher=event_dispatcher)
+    ResponseLoader.setup(event_dispatcher=event_dispatcher)
 
     for crawler in config.get_crawlers():
         crawler.start()

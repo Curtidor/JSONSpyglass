@@ -31,8 +31,10 @@ class ConfigLoader:
 
         self._total_elements = 0
         self._element_names = set()
+
         self._target_url_table = {}
         self._parsing_options_cache = {}
+
         self._build_target_url_table()
         self.format_config()
 
@@ -79,21 +81,25 @@ class ConfigLoader:
         Yields:
             Crawler: A Crawler instance.
         """
-        seeds = self.get_target_urls()
         NO_CRAWLER_FOUND = 'no_crawler_found'
+
+        seeds = self.get_target_urls()
+        # for every url get it's related crawler options
         crawler_options_collection = [crawler_data.get('crawler', NO_CRAWLER_FOUND) for crawler_data in
                                       self.config_data.get('target_urls')]
         # for every target_url there's an url, so we can safely use the index from crawler_options_collection to
         # index the seeds list as they are in the same order and of the same length
         for index, crawler_options_raw_data in enumerate(crawler_options_collection):
+            # a flag to indicate if the crawler needs to render each url
             render_pages = self._target_url_table.get(seeds[index], {}).get('render_pages', False)
             if crawler_options_raw_data == NO_CRAWLER_FOUND:
-                crawler_options = Crawler(seeds[index], [ResponseLoader.get_domain(seeds[index])],
-                                          render_pages=render_pages)
+                # create a default crawler if one was not specified
+                crawler = Crawler(seeds[index], [ResponseLoader.get_domain(seeds[index])],
+                                  render_pages=render_pages)
             else:
-                crawler_options = Deserializer.deserialize(Crawler(seeds[index], [], render_pages=render_pages),
-                                                           crawler_options_raw_data)
-            yield crawler_options
+                crawler = Crawler(seeds[index], [], render_pages=render_pages)
+                Deserializer.deserialize(crawler, crawler_options_raw_data)
+            yield crawler
 
     def only_scrape_sub_pages(self, url: str) -> bool:
         """
@@ -152,7 +158,8 @@ class ConfigLoader:
             if not element_parsing_data:
                 Logger.console_log(
                     f"element has no data parsing options specified, collect data will be ignored: {element}",
-                    LoggerLevel.WARNING)
+                    LoggerLevel.WARNING
+                )
             else:
                 self._parsing_options_cache.update({element_id: element_parsing_data})
 

@@ -1,8 +1,7 @@
 import asyncio
 import re
 
-from asyncio import Queue
-from typing import List, Any, Generator, AsyncGenerator, Iterable
+from typing import List, Any, Generator, AsyncGenerator, Iterable, Set
 from urllib.robotparser import RobotFileParser
 
 from loaders.response_loader import ResponseLoader, ScrapedResponse
@@ -50,7 +49,7 @@ class Crawler:
         self._visited = set()
         self._clicked_elements = set()
         self._running_tasks = set()
-        self._elements_to_click = Queue()
+        self._response_with_href_elements: Set[ScrapedResponse] = set()
 
         # robot.txt parser
         self._robot_parser = RobotFileParser()
@@ -90,6 +89,7 @@ class Crawler:
         Waits for all crawling task to finish and print summary statistics on exit.
         """
         await asyncio.gather(*self._running_tasks)
+        await BrowserManager.close()
 
         print("TOTAL SITES VISITED:", len(self._visited))
         print("SITES TO VISIT:", len(self._to_visit))
@@ -115,44 +115,11 @@ class Crawler:
                     yield child_url
                 self._visited.add(child_url)
 
-    async def scrape_dynamic_ajax_content(self) -> AsyncGenerator[ScrapedResponse, Any]:
-        """
-        Scrapes dynamic content by clicking on specified elements triggering AJAX requests
-        and then waiting for the requests to finish before collecting data.
-
-        This function clicks on specific elements, waits for AJAX requests to complete,
-        and then gathers data from the loaded pages.
-        """
-        pages_to_close = []  # List to store pages that need to be closed
-
-        # Iterate through the elements to click in the queue
-        while not self._elements_to_click.empty():
-            page_info: ScrapedResponse = await self._elements_to_click.get()
-
-            # Iterate through href elements and click them
-            for click_element in page_info.href_elements:
-                await click_element.click()
-
-                responses = await ResponseLoader.load_responses(page_info.page.url, render_pages=True)
-                # we can get the first value of the dict as we are only sending out 1 url, so we will only get 1 response
-                response = next(iter(responses.values()))
-                # if there are no elements to click we can close the page
-                # as its no longer need
-                if not response.href_elements:
-                    pages_to_close.append(response.page)
-
-                yield response
-
-            # Mark the element as processed
-            self._elements_to_click.task_done()
-
-        # Close all opened pages using asyncio.gather
-        await asyncio.gather(*[BrowserManager.close_page(page, feed_into_pool=True) for page in pages_to_close])
-
     async def _run(self):
         """
         Internal method to perform the crawling asynchronously.
         """
+        await BrowserManager.initialize(self.render_pages)
 
         new_urls = set()
         while self._to_visit and self._current_depth <= self.max_depth:
@@ -176,10 +143,11 @@ class Crawler:
             # loop over all the responses
             for url, response_info in response_pairs.items():
                 self._visited.add(url)
-                # if there are elements that need to be clicked put href element in the click queue
-                # and mark the page as still busy
-                if response_info.href_elements:
-                    self._elements_to_click.put_nowait(response_info)
+                # if there are elements that need to be clicked and at least 1 of them
+                # are unique put href element in the click set
+                if response_info.href_elements and self._has_unique_element_handle(response_info):
+                    # POTENTIAL DUPE BUG
+                    self._response_with_href_elements.add(response_info)
                 # else if a page was used with the response, it can be recycled
                 elif response_info.page:
                     await BrowserManager.close_page(response_info.page, feed_into_pool=True)
@@ -196,6 +164,36 @@ class Crawler:
                 self._current_depth += 1
                 new_urls.clear()
 
+    async def _scrape_dynamic_ajax_content(self) -> AsyncGenerator[ScrapedResponse, Any]:
+        """
+        Scrapes dynamic content by clicking on specified elements triggering AJAX requests
+        and then waiting for the requests to finish before collecting data.
+
+        This function clicks on specific elements, waits for AJAX requests to complete,
+        and then gathers data from the loaded pages.
+        """
+        pages_to_close = []  # List to store pages that need to be closed
+
+        while len(self._response_with_href_elements):
+            page_info: ScrapedResponse = self._response_with_href_elements.pop()
+
+            # Iterate through href elements and click them
+            for click_element in page_info.href_elements:
+                await click_element.click()
+
+                responses = await ResponseLoader.load_responses(page_info.page.url, render_pages=True)
+                # we can get the first value of the dict as we are only sending out 1 url, so we will only get 1 response
+                response = next(iter(responses.values()))
+                # Check if there are no href elements, or no unique elements
+                # if so close the page
+                if not response.href_elements or not self._has_unique_element_handle(response):
+                    pages_to_close.append(response.page)
+
+                yield response
+
+        # Close all opened pages using asyncio.gather
+        await asyncio.gather(*[BrowserManager.close_page(page, feed_into_pool=True) for page in pages_to_close])
+
     async def _handle_dynamic_ajax_content(self) -> AsyncGenerator[Generator[str, None, None], None]:
         """
         Handle dynamic AJAX content scraping, including handling click-through responses.
@@ -207,21 +205,38 @@ class Crawler:
             Generator[str, None]: A generator of URLs for further processing, or None if no URLs are found.
         """
         if self.render_pages:
-            responses_to_click_through = []
-            async for response in self.scrape_dynamic_ajax_content():
+            new_elements_to_click = set()
+            async for response in self._scrape_dynamic_ajax_content():
                 self._visited.add(response.url)
                 # If there are href elements, we need to keep the page open.
-                if response.href_elements:
-                    responses_to_click_through.append(response)
+                if response.href_elements and self._has_unique_element_handle(response):
+                    new_elements_to_click.add(response)
                 # Otherwise, we can return the page to the pool.
                 else:
                     await BrowserManager.close_page(response.page, feed_into_pool=True)
                 yield self.collect_urls([response.url], [response])
-            for response_to_click_through in responses_to_click_through:
-                if response_to_click_through.url in self._visited:
-                    await BrowserManager.close_page(response_to_click_through.page, feed_into_pool=True)
-                    continue
-                self._elements_to_click.put_nowait(response_to_click_through)
+
+            self._response_with_href_elements.update(new_elements_to_click)
+
+    def _has_unique_element_handle(self, scraped_response: ScrapedResponse) -> bool:
+        """
+        Check if the `ScrapedResponse` contains at least one unique `ElementHandle` in its `href_elements`.
+
+        Args:
+           scraped_response (ScrapedResponse): The `ScrapedResponse` to check for unique `ElementHandles`.
+
+        Returns:
+           bool: True if the provided `ScrapedResponse` has at least one unique `ElementHandle` in its `href_elements`,
+           False otherwise. Duplicate elements are removed from the `href_elements` during the check.
+        """
+        # Create a set of all ElementHandles from the responses
+        all_elements = {elem for response in self._response_with_href_elements for elem in response.href_elements}
+
+        for element in reversed(scraped_response.href_elements):
+            if element in all_elements:
+                scraped_response.href_elements.remove(element)
+
+        return len(scraped_response.href_elements) > 1
 
     def _set_event_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         """

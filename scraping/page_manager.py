@@ -1,4 +1,3 @@
-import asyncio
 from asyncio import Queue, Lock
 from typing import Set
 from playwright.async_api import Browser, async_playwright, Page
@@ -79,7 +78,7 @@ class BrowserManager:
 
     @classmethod
     async def initialize(cls, is_rendering: bool = False):
-        if is_rendering:
+        if cls._browser is None and is_rendering:
             cls._browser = await cls.get_browser()
             await PagePool.populate_pool(5)
 
@@ -114,16 +113,18 @@ class BrowserManager:
                 pool.put_nowait(page)
 
     @classmethod
-    async def get_browser(cls) -> Browser:
+    async def get_browser(cls, headless: bool = False) -> Browser:
         if cls._browser is None:
             p = await async_playwright().start()
-            cls._browser = await p.chromium.launch(headless=False)
+            cls._browser = await p.chromium.launch(headless=headless)
         return cls._browser
 
     @classmethod
     async def close(cls):
         for page in cls._all_pages:
-            await cls.close_page(page)
+            await page.close()
+        cls._all_pages.clear()
+
         if cls._browser:
             await cls._browser.close()
 

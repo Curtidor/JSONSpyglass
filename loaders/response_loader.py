@@ -1,7 +1,6 @@
 import aiohttp
 import asyncio
 
-from dataclasses import dataclass
 from enum import Enum
 from typing import Coroutine, Dict, AsyncGenerator, List, Set, Tuple, Generator, Any
 from aiohttp import ClientTimeout
@@ -17,13 +16,26 @@ from utils.logger import LoggerLevel, Logger
 # address the page loading and pool bugs
 
 
-@dataclass
 class ScrapedResponse:
-    html: str
-    status_code: int
-    url: str
-    href_elements: List[ElementHandle] = None
-    page: Page = None
+    def __init__(self, html, status_code, url, href_elements=None, page=None):
+        self.html = html
+        self.status_code = status_code
+        self.url = url
+        self.href_elements = href_elements
+        self.page = page
+
+    def __eq__(self, other):
+        if isinstance(other, ScrapedResponse):
+            return (
+                    self.html == other.html and
+                    self.status_code == other.status_code and
+                    self.url == other.url and
+                    self.href_elements == other.href_elements
+            )
+        return False
+
+    def __hash__(self):
+        return hash((self.html, self.status_code, self.url))
 
 
 # this if for a future feature where we can try to get different states of a page event
@@ -50,10 +62,9 @@ class ResponseLoader:
 
     _is_initialized: bool = False
 
-    @staticmethod
-    async def setup(event_dispatcher: EventDispatcher, is_rendering: bool = False) -> None:
-        await BrowserManager.initialize(is_rendering)
-        ResponseLoader._event_dispatcher = event_dispatcher
+    @classmethod
+    def setup(cls, event_dispatcher: EventDispatcher) -> None:
+        cls._event_dispatcher = event_dispatcher
 
     @staticmethod
     def normalize_url(url: str) -> str:
@@ -111,6 +122,7 @@ class ResponseLoader:
             try:
                 await asyncio.wait_for(
                     asyncio.gather(
+                        # ERROR: the load event is creating time out errors
                         page.wait_for_load_state("load", timeout=timeout_time),
                         page.wait_for_load_state("networkidle", timeout=timeout_time),
                     ),
