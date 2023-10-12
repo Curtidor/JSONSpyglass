@@ -55,8 +55,11 @@ class PagePool:
 
         """
         async with cls._lock:
+            if page is None:
+                return False
+
             # Check if the pool is full
-            if cls._pool.qsize() >= cls._max_size:
+            if cls.is_full():
                 return False
 
             # Prepare the page for reuse
@@ -71,10 +74,15 @@ class PagePool:
     def set_pool_size(cls, pool_size: int) -> None:
         cls._max_size = pool_size
 
+    @classmethod
+    def is_full(cls) -> bool:
+        return cls._pool.qsize() >= cls._max_size
+
 
 class BrowserManager:
     _browser: Browser = None
     _all_pages: Set[Page] = set()
+    _lock: Lock = Lock()
 
     @classmethod
     async def initialize(cls, is_rendering: bool = False):
@@ -168,21 +176,19 @@ class BrowserManager:
             ```
 
         """
-        print(PagePool.t_active_pages(), "TOTAL POOL PAGES")
-        if feed_into_pool:
-            print("RETURNING TO POOL:", page)
-            if await PagePool.put_page_back(page):
+        async with cls._lock:
+            if feed_into_pool and not PagePool.is_full():
+                if await PagePool.put_page_back(page):
+                    print("RETURN SUCCESS:", page)
+                    cls.remove_from_active_pages(page)
+            elif not feed_into_pool:
+                print("CLOSING PAGE:", page)
                 cls.remove_from_active_pages(page)
-            else:
-                print("BAD put")
-        elif not feed_into_pool:
-            print("CLOSING PAGE:", page)
-            cls.remove_from_active_pages(page)
-            await page.close()
-        else:
-            print("FULL POOL")
-            cls.remove_from_active_pages(page)
-            await page.close()
+                await page.close()
+            elif PagePool.is_full():
+                print("FULL POOL")
+                cls.remove_from_active_pages(page)
+                await page.close()
 
     @staticmethod
     async def get_page() -> Page:

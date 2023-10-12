@@ -101,7 +101,7 @@ class DataSaver:
         if orientation not in ALLOWED_ORIENTATIONS:
             raise ValueError(f"Unknown orientation: {orientation}, allowed orientations are => {ALLOWED_ORIENTATIONS} ")
 
-        ordered_data = [[] for i in range(t_items)]
+        ordered_data = [[] for _ in range(t_items)]
 
         for index, item in enumerate(ordered_data):
             item.extend(data[index::len(ordered_data)])

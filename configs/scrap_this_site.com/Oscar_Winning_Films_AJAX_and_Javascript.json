@@ -9,7 +9,7 @@
       "crawler": {
         "ignore_robots_txt": true,
         "crawl_delay": 0.01,
-        "max_depth": 0,
+        "max_depth": 1,
         "allowed_domains": ["www.scrapethissite.com"]
       }
     }

@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Coroutine, Dict, AsyncGenerator, List, Set, Tuple, Generator, Any
 from aiohttp import ClientTimeout
 from urllib.parse import urlsplit, urlunsplit, urljoin, urlparse
-from playwright.async_api import ElementHandle, Page, Request
+from playwright.async_api import Page, Request, Locator
 from selectolax.parser import HTMLParser
 
 from events.event_dispatcher import EventDispatcher, Event
@@ -13,16 +13,16 @@ from scraping.page_manager import BrowserManager
 from utils.logger import LoggerLevel, Logger
 
 # TODO
-# address the page loading and pool bugs
 
 
 class ScrapedResponse:
-    def __init__(self, html, status_code, url, href_elements=None, page=None):
-        self.html = html
-        self.status_code = status_code
-        self.url = url
-        self.href_elements = href_elements
-        self.page = page
+    def __init__(self, html: str, status_code: int, url: str, href_elements: List[Locator] = None,
+                 page: Page = None):
+        self.html: str = html
+        self.status_code: int = status_code
+        self.url: str = url
+        self.href_elements: List[Locator] = href_elements
+        self.page: Page = page
 
     def __eq__(self, other):
         if isinstance(other, ScrapedResponse):
@@ -50,6 +50,7 @@ class ResponseLoader:
     """
     A utility class for loading and processing web responses.
     """
+    _BAD_RESPONSE_CODE = -1
 
     _max_responses = 60
     _max_renders = 5
@@ -58,7 +59,7 @@ class ResponseLoader:
     _response_semaphore = asyncio.Semaphore(_max_responses)
     _render_semaphore = asyncio.Semaphore(_max_renders)
 
-    _hrefs_values_to_click = ('#', 'javascript:void(0);', 'javascript:;')
+    _hrefs_values_to_click = {'#', 'javascript:void(0);', 'javascript:;'}
 
     _is_initialized: bool = False
 
@@ -120,6 +121,8 @@ class ResponseLoader:
             page.on("requestfinished", request_finished_callback)
 
             try:
+                pass
+                """"
                 await asyncio.wait_for(
                     asyncio.gather(
                         # ERROR: the load event is creating time out errors
@@ -128,6 +131,7 @@ class ResponseLoader:
                     ),
                     timeout=timeout_time / 1000  # Convert back to seconds
                 )
+                """
             except asyncio.TimeoutError as te:
                 Logger.console_log(
                     f"TIME OUT ERROR WHEN WAITING FOR [load state]: {te}\n"
@@ -160,7 +164,8 @@ class ResponseLoader:
             if not html:
                 html = await page.content()
 
-            return ScrapedResponse(html, response.status, href_elements=hrefs_elements, page=page, url=url)
+            status_code = response.status if response else cls._BAD_RESPONSE_CODE
+            return ScrapedResponse(html, status_code, href_elements=hrefs_elements, page=page, url=url)
 
     @classmethod
     async def get_response(cls, url: str, timeout_time: float = 30) -> ScrapedResponse:
@@ -208,6 +213,14 @@ class ResponseLoader:
         results = {}
         async for result in cls._generate_responses(tasks, urls):
             url, scraped_response = result
+
+            if scraped_response.status_code == cls._BAD_RESPONSE_CODE:
+                Logger.console_log(
+                    f"!!BAD Responses Received: URL={url}, Status={scraped_response.status_code}!!",
+                    LoggerLevel.WARNING, include_time=True
+                )
+                continue
+
             Logger.console_log(
                 f"Responses Received: URL={url}, Status={scraped_response.status_code}",
                 LoggerLevel.INFO, include_time=True
@@ -241,11 +254,21 @@ class ResponseLoader:
         return urlparse(url).netloc
 
     @classmethod
-    async def collect_hrefs_with_elements(cls, page: Page) -> List[ElementHandle]:
-        href_elements = await page.query_selector_all('a[href]')
+    async def collect_hrefs_with_elements(cls, page: Page) -> List[Locator]:
+        """
+        Collects and returns a list of Locator elements representing anchor tags (href) with specific values on a web page.
+
+        Args:
+            page (Page): The Playwright Page object to search for anchor tags.
+
+        Returns:
+            List[Locator]: A list of Locator elements representing anchor tags with specific href attribute values.
+
+        """
+        href_elements_locator = page.locator('a[href]')
 
         hrefs_to_click = []
-        for href_element in href_elements:
+        for href_element in await href_elements_locator.all():
             href = await href_element.get_attribute('href')
 
             if href in cls._hrefs_values_to_click:
