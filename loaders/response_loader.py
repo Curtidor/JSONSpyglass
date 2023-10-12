@@ -204,27 +204,28 @@ class ResponseLoader:
             with JavaScript. The method triggers a "new_responses" event with the loaded response data.
         """
         urls = set(urls)
+
         response_method = cls.get_rendered_response if render_pages \
             else cls.get_response
-
-        html_responses = []
         tasks = [response_method(url) for url in urls]
 
         results = {}
+        html_responses = []
         async for result in cls._generate_responses(tasks, urls):
             url, scraped_response = result
 
-            if scraped_response.status_code == cls._BAD_RESPONSE_CODE:
-                Logger.console_log(
-                    f"!!BAD Responses Received: URL={url}, Status={scraped_response.status_code}!!",
-                    LoggerLevel.WARNING, include_time=True
-                )
-                continue
+            log_message = "!!Bad Responses Received!!" if cls._BAD_RESPONSE_CODE else "Response Received"
+            warning_level = LoggerLevel.WARNING if cls._BAD_RESPONSE_CODE else LoggerLevel.INFO
 
             Logger.console_log(
-                f"Responses Received: URL={url}, Status={scraped_response.status_code}",
-                LoggerLevel.INFO, include_time=True
+                f"{log_message}: URL={url}, Status={scraped_response.status_code}",
+                warning_level,
+                include_time=True
             )
+
+            if scraped_response.status_code == cls._BAD_RESPONSE_CODE:
+                continue
+
             html_responses.append({url: scraped_response.html})
             results.update({url: scraped_response})
 

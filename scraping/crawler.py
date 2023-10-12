@@ -130,33 +130,20 @@ class Crawler:
         new_urls = set()
         while self._to_visit and self._current_depth <= self.max_depth:
             Logger.console_log(f"DEPTH {self._current_depth}", LoggerLevel.INFO)
-            if self.has_crawl_delay:
-                # If there's a crawl delay, process URLs one at a time
-                # by popping a URL from the _to_visit set
-                response_pairs = await ResponseLoader.load_responses(
-                    self._to_visit.pop(),
-                    render_pages=self.render_pages
-                )
-                await asyncio.sleep(self.crawl_delay)
-            else:
-                # If no crawl delay, process all URLs at once
-                response_pairs = await ResponseLoader.load_responses(
-                    *self._to_visit,
-                    render_pages=self.render_pages
-                )
-                self._to_visit.clear()
 
-            # loop over all the responses
-            for url, response_info in response_pairs.items():
-                self._visited.add(url)
-                # if there are elements that need to be clicked and at least 1 of them
-                # are unique put href element in the click set
-                if response_info.href_elements and await self._has_unique_locator(response_info):
-                    # POTENTIAL DUPE BUG
-                    self._response_with_href_elements.add(response_info)
-                # else if a page was used with the response, it can be recycled
-                elif response_info.page:
-                    await BrowserManager.close_page(response_info.page, feed_into_pool=True)
+            urls_to_get_responses_from = self._to_visit.pop() if self.has_crawl_delay else self._to_visit
+
+            response_pairs = await ResponseLoader.load_responses(
+                urls_to_get_responses_from,
+                render_pages=self.render_pages
+            )
+            if not self.has_crawl_delay:
+                self._to_visit.clear()
+            else:
+                await asyncio.sleep(self.crawl_delay)
+
+            # Process responses
+            await self._process_responses(response_pairs)
 
             new_urls.update(
                 self.collect_child_urls_from_responses(response_pairs.keys(), response_pairs.values())
@@ -171,6 +158,24 @@ class Crawler:
                 self._to_visit.update(new_urls)
                 self._current_depth += 1
                 new_urls.clear()
+
+    async def _process_responses(self, response_pairs: Dict[str, ScrapedResponse]) -> None:
+        """
+        Process the responses and update crawled data and visited URLs.
+
+        Args:
+            response_pairs (Dict[str, ScrapedResponse]): A dictionary of URL-response pairs to process.
+        """
+        for url, response_info in response_pairs.items():
+            self._visited.add(url)
+            # if there are elements that need to be clicked and at least 1 of them
+            # are unique, put href elements in the click set
+            if response_info.href_elements and await self._has_unique_locator(response_info):
+                # POTENTIAL DUPE BUG
+                self._response_with_href_elements.add(response_info)
+            # else if a page was used with the response, it can be recycled
+            elif response_info.page:
+                await BrowserManager.close_page(response_info.page, feed_into_pool=True)
 
     async def _scrape_dynamic_ajax_content(self) -> AsyncGenerator[ScrapedResponse, Any]:
         """
@@ -214,27 +219,25 @@ class Crawler:
         Yields:
             Generator[str, None]: A generator of URLs for further processing, or None if no URLs are found.
         """
-        if self.render_pages:
-            responses: Dict[str, ScrapedResponse] = {}
-            new_elements_to_click = set()
-            async for response in self._scrape_dynamic_ajax_content():
-                if response.html == "error":
-                    continue
-                self._visited.add(response.url)
-                # If there are href elements, we need to keep the page open.
-                if response.href_elements and await self._has_unique_locator(response):
-                    new_elements_to_click.add(response)
-                # Otherwise, we can return the page to the pool.
-                else:
-                    await BrowserManager.close_page(response.page, feed_into_pool=True)
+        responses: Dict[str, ScrapedResponse] = {}
+        new_elements_to_click = set()
 
-                if response:
-                    responses.update({response.url: response})
+        async for response in self._scrape_dynamic_ajax_content():
+            self._visited.add(response.url)
+            # If there are href elements, we need to keep the page open.
+            if response.href_elements and await self._has_unique_locator(response):
+                new_elements_to_click.add(response)
+            # Otherwise, we can return the page to the pool.
+            else:
+                await BrowserManager.close_page(response.page, feed_into_pool=True)
 
-            for url in self.collect_child_urls_from_responses(responses.keys(), responses.values()):
-                yield url
+            if response:
+                responses.update({response.url: response})
 
-            self._response_with_href_elements.update(new_elements_to_click)
+        for url in self.collect_child_urls_from_responses(responses.keys(), responses.values()):
+            yield url
+
+        self._response_with_href_elements.update(new_elements_to_click)
 
     async def _has_unique_locator(self, scraped_response: ScrapedResponse) -> bool:
         """
