@@ -1,10 +1,16 @@
 from typing import List, Dict, Union
-from bs4 import BeautifulSoup, ResultSet
+from selectolax.parser import HTMLParser
 
 from events.event_dispatcher import EventDispatcher, Event
 from loaders.config_loader import ConfigLoader
 from models.scarped_data import ScrapedData
 from factories.config_element_factory import ConfigElementFactory, TargetElement, SelectorElement
+
+# css selectors
+# ID with class
+# [id=product_description].sub-header
+# Class followed by class
+# .instock.availability
 
 
 class DataScraper:
@@ -35,6 +41,7 @@ class DataScraper:
             event (Event): The event triggered with the responses' data.
         """
         responses = event.data
+        print(responses)
 
         all_scraped_data = []
         for response in responses:
@@ -47,7 +54,7 @@ class DataScraper:
         results = []
 
         for url, content in response.items():
-            soup = BeautifulSoup(content, "html.parser")
+            parser = HTMLParser(content)
 
             if self.config.only_scrape_sub_pages(url):
                 continue
@@ -55,44 +62,45 @@ class DataScraper:
             for element in self.elements:
                 if not element:
                     continue
-                results.append(self._collect_scraped_data(url, soup, element))
+                results.append(self._collect_scraped_data(url, parser, element))
 
         return results
 
-    def _collect_scraped_data(self, url: str, soup: BeautifulSoup, element: Union[TargetElement, SelectorElement]) -> ScrapedData:
+    def _collect_scraped_data(self, url: str, parser: HTMLParser, element: Union[TargetElement, SelectorElement]) -> ScrapedData:
         if element.element_type == ConfigElementFactory.ELEMENT_SELECTOR:
-            data = self._collect_all_selector_elements(url, element, soup)
+            data = self._collect_all_selector_elements(url, element, parser)
         else:
-            data = self._collect_all_target_elements(url, element, soup)
+            data = self._collect_all_target_elements(url, element, parser)
 
         return data
 
     @staticmethod
-    def _collect_all_target_elements(url: str, target_element: TargetElement, soup: BeautifulSoup) -> ScrapedData:
+    def _collect_all_target_elements(url: str, target_element: TargetElement, parser: HTMLParser) -> ScrapedData:
         """
         Collect data from all target elements specified by the TargetElement.
 
         Args:
             url (str): The URL of the web page.
             target_element (TargetElement): The TargetElement instance representing the element to collect data from.
-            soup (BeautifulSoup): The BeautifulSoup instance representing the parsed HTML content.
+            parser (HTMLParser): The Selectolax HTMLParser instance representing the parsed HTML content.
 
         Returns:
             ScrapedData: An instance containing the collected data.
         """
-        result_set: ResultSet = soup.find_all(
-            attrs=target_element.element_search_hierarchy[0]) if target_element.element_search_hierarchy else []
+        # Use Selectolax's CSS-like selectors to find elements
+        result_set = parser.css(
+            target_element.element_search_hierarchy[0]) if target_element.element_search_hierarchy else []
 
         if len(target_element.element_search_hierarchy) <= 1:
             return ScrapedData(url, result_set, target_element.element_id)
 
         for attr in target_element.element_search_hierarchy[1:]:
+            new_result_set = []
             for tag in result_set:
-                temp_result_set = tag.find_all(attrs=attr)
+                temp_result_set = tag.css(attr)
                 if temp_result_set:
-                    result_set = temp_result_set
-                else:
-                    return ScrapedData(url, result_set, target_element.element_id)
+                    new_result_set.extend(temp_result_set)
+            result_set = new_result_set
 
         return ScrapedData(url, result_set, target_element.element_id)
 
@@ -110,4 +118,3 @@ class DataScraper:
             ScrapedData: An instance containing the collected data.
         """
         return ScrapedData(url, soup.select(selector_element.css_selector), selector_element.element_id)
-

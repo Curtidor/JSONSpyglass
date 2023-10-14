@@ -96,7 +96,7 @@ class ConfigElementFactory:
 
         # Convert attributes into a search hierarchy to simplify the scraping process.
         if search_hierarchy:
-            search_hierarchy = TargetElement.format_search_hierarchy(search_hierarchy)
+            search_hierarchy = TargetElement.format_search_hierarchy_from_attributes(search_hierarchy)
 
             new_element.element_search_hierarchy = search_hierarchy
             new_element.create_attributes_from_search_hierarchy()

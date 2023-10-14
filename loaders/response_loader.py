@@ -214,14 +214,7 @@ class ResponseLoader:
         async for result in cls._generate_responses(tasks, urls):
             url, scraped_response = result
 
-            log_message = "!!Bad Responses Received!!" if cls._BAD_RESPONSE_CODE else "Response Received"
-            warning_level = LoggerLevel.WARNING if cls._BAD_RESPONSE_CODE else LoggerLevel.INFO
-
-            Logger.console_log(
-                f"{log_message}: URL={url}, Status={scraped_response.status_code}",
-                warning_level,
-                include_time=True
-            )
+            cls._log_response(scraped_response)
 
             if scraped_response.status_code == cls._BAD_RESPONSE_CODE:
                 continue
@@ -306,3 +299,18 @@ class ResponseLoader:
                 Logger.console_log(f"Responses Error: {response_info}", LoggerLevel.ERROR)
                 continue
             yield url, response_info
+
+    @classmethod
+    def _log_response(cls, response: ScrapedResponse) -> None:
+        log_message = "!!Bad Response Received!!"
+        warning_level = LoggerLevel.WARNING
+
+        if response.status_code != cls._BAD_RESPONSE_CODE:
+            log_message = "Response Received"
+            warning_level = LoggerLevel.INFO
+
+        Logger.console_log(
+            f"{log_message}: URL={response.url}, Status={response.status_code}",
+            warning_level,
+            include_time=True
+        )
