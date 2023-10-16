@@ -1,22 +1,16 @@
-from typing import List, Dict, Union
+from typing import List, Dict
 from selectolax.parser import HTMLParser
 
 from events.event_dispatcher import EventDispatcher, Event
 from loaders.config_loader import ConfigLoader
 from models.scarped_data import ScrapedData
-from factories.config_element_factory import ConfigElementFactory, TargetElement, SelectorElement
-
-# css selectors
-# ID with class
-# [id=product_description].sub-header
-# Class followed by class
-# .instock.availability
+from models.target_element import TargetElement
 
 
 class DataScraper:
     def __init__(self,
                  config: ConfigLoader,
-                 elements: List[Union[SelectorElement, TargetElement]],
+                 elements: List[TargetElement],
                  event_dispatcher: EventDispatcher):
         """
         Initialize the DataScraper class.
@@ -41,7 +35,6 @@ class DataScraper:
             event (Event): The event triggered with the responses' data.
         """
         responses = event.data
-        print(responses)
 
         all_scraped_data = []
         for response in responses:
@@ -66,16 +59,13 @@ class DataScraper:
 
         return results
 
-    def _collect_scraped_data(self, url: str, parser: HTMLParser, element: Union[TargetElement, SelectorElement]) -> ScrapedData:
-        if element.element_type == ConfigElementFactory.ELEMENT_SELECTOR:
-            data = self._collect_all_selector_elements(url, element, parser)
-        else:
-            data = self._collect_all_target_elements(url, element, parser)
+    def _collect_scraped_data(self, url: str, parser: HTMLParser, element: TargetElement) -> ScrapedData:
+        data = self.collect_all_target_elements(url, element, parser)
 
         return data
 
     @staticmethod
-    def _collect_all_target_elements(url: str, target_element: TargetElement, parser: HTMLParser) -> ScrapedData:
+    def collect_all_target_elements(url: str, target_element: TargetElement, parser: HTMLParser) -> ScrapedData:
         """
         Collect data from all target elements specified by the TargetElement.
 
@@ -87,7 +77,6 @@ class DataScraper:
         Returns:
             ScrapedData: An instance containing the collected data.
         """
-        # Use Selectolax's CSS-like selectors to find elements
         result_set = parser.css(
             target_element.element_search_hierarchy[0]) if target_element.element_search_hierarchy else []
 
@@ -103,18 +92,3 @@ class DataScraper:
             result_set = new_result_set
 
         return ScrapedData(url, result_set, target_element.element_id)
-
-    @staticmethod
-    def _collect_all_selector_elements(url: str, selector_element: SelectorElement, soup: BeautifulSoup) -> ScrapedData:
-        """
-        Collect data from all selector elements specified by the SelectorElement.
-
-        Args:
-            url (str): The URL of the web page.
-            selector_element (SelectorElement): The SelectorElement instance representing the element to collect data from.
-            soup (BeautifulSoup): The BeautifulSoup instance representing the parsed HTML content.
-
-        Returns:
-            ScrapedData: An instance containing the collected data.
-        """
-        return ScrapedData(url, soup.select(selector_element.css_selector), selector_element.element_id)

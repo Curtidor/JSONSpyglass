@@ -12,8 +12,6 @@ from events.event_dispatcher import EventDispatcher, Event
 from scraping.page_manager import BrowserManager
 from utils.logger import LoggerLevel, Logger
 
-# TODO
-
 
 class ScrapedResponse:
     def __init__(self, html: str, status_code: int, url: str, href_elements: List[Locator] = None,

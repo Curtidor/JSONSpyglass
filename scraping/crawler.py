@@ -10,8 +10,7 @@ from loaders.response_loader import ResponseLoader, ScrapedResponse
 from utils.logger import LoggerLevel, Logger
 from .page_manager import BrowserManager
 
-# TODO
-# Need work on page management pages are closed to soon
+# TODO (SPEED AND EFFICIENCY IMPROVEMENT) Need work on page management pages are closed to soon
 
 
 class Crawler:

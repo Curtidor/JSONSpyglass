@@ -21,14 +21,27 @@ class TestTargetElementModel(unittest.TestCase):
             ]
         }
 
-        self.search_hierarchy_raw = [
-                {"name": "class", "value": "grandparent"},
-                {"name": "class", "value": "parent someother_class"},
-                {"name": "class", "value": "child"},
-            ]
+        self.css_selector = {
+            "css_selector": ".some-class"
+        }
 
-        formatted_search_hierarchy_attrs = TargetElement.collect_attributes(self.search_hierarchy_raw)
-        self.search_hierarchy_formatted = TargetElement.format_search_hierarchy_from_attributes([formatted_search_hierarchy_attrs])
+        self.search_hierarchy_raw_one = [
+            {"name": "class", "value": "grandparent"},
+            {"name": "class", "value": "parent someother_class"},
+            {"name": "class", "value": "child"},
+        ]
+
+        self.search_hierarchy_raw_two = [
+            {'name': 'class', 'value': 'btn active'},
+            {'name': 'id', 'value': 'submit-button'},
+            {'name': 'data-role', 'value': 'button'}
+        ]
+
+        self.search_hierarchy_raw_with_css = [
+            {'name': 'class', 'value': 'btn active'},
+            {'css_selector': '[id=submit-button]'},
+            {'name': 'data-role', 'value': 'button'}
+        ]
 
         self.html = """
         <div class="grandparent">
@@ -57,19 +70,38 @@ class TestTargetElementModel(unittest.TestCase):
         expected_out = {'class': 'price_color price_amount', 'id': '1'}
         self.assertEqual(expected_out, out_put, "Collect attributes (multi-class) failed")
 
+    def test_css_selector(self):
+        out_put = TargetElement.collect_attributes([self.css_selector])
+
+        expected_out = {'css_selector': ".some-class"}
+        self.assertEqual(expected_out, out_put)
+
     def test_build_attributes_into_search_hierarchy(self):
         """Test building a search hierarchy from collected attributes."""
         attrs = TargetElement.collect_attributes(self.multi_class_attributes["attributes"])
 
-        element = TargetElement("test_element", "target", 0, attrs, [])
+        element = TargetElement("test_element", 0)
 
         element.element_search_hierarchy = TargetElement.format_search_hierarchy_from_attributes([attrs])
 
         expected_out = [".price_color.price_amount", "[id=1]"]
         self.assertEqual(expected_out, element.element_search_hierarchy)
 
-    def test_search_hierarchy(self):
-        print(self.search_hierarchy_formatted)
+    def test_search_hierarchy_from_raw_hierarchy(self):
+        hierarchy = TargetElement.create_search_hierarchy_from_raw_hierarchy(self.search_hierarchy_raw_one)
+
+        expected_out = ['.grandparent', '.parent.someother_class', '.child']
+        self.assertEqual(expected_out, hierarchy)
+
+        hierarchy = TargetElement.create_search_hierarchy_from_raw_hierarchy(self.search_hierarchy_raw_two)
+
+        expected_out = ['.btn.active', '[id=submit-button]', '[data-role=button]']
+        self.assertEqual(expected_out, hierarchy)
+
+        hierarchy = TargetElement.create_search_hierarchy_from_raw_hierarchy(self.search_hierarchy_raw_with_css)
+
+        expected_out = ['.btn.active', '[id=submit-button]', '[data-role=button]']
+        self.assertEqual(expected_out, hierarchy)
 
 
 if __name__ == '__main__':

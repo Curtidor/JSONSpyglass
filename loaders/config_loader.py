@@ -128,10 +128,8 @@ class ConfigLoader:
             element_type = "BAD SELECTOR"
             # we treat search hierarchies the same as target elements as all target elements are
             # formatted into search hierarchies
-            if element.get('tag', "") or element.get('search_hierarchy'):
+            if element.get('search_hierarchy', '') or element.get('css_selector', ''):
                 element_type = "target"
-            elif element.get('css_selector', ""):
-                element_type = "selector"
 
             yield element_type, element
 

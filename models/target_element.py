@@ -1,16 +1,15 @@
-from typing import Any, List, Dict, Generator
+from typing import List, Dict, Generator
 from dataclasses import dataclass
-
-from .config_element import ConfigElement
 
 
 @dataclass
-class TargetElement(ConfigElement):
-    attributes: Dict[str, Any] = None
+class TargetElement:
+    name: str
+    element_id: int
     element_search_hierarchy: List[str] = None
 
     @staticmethod
-    def collect_attributes(attributes: List[Dict[str, str]]) -> Dict[str, Any]:
+    def collect_attributes(attributes: List[Dict[str, str]]) -> Dict[str, str]:
         """
         Collect and format a list of attribute dictionaries into a consolidated dictionary.
 
@@ -44,7 +43,12 @@ class TargetElement(ConfigElement):
             value = attribute.get("value", "None")
 
             if not value or not name:
-                raise ValueError(f"Improperly formatted attributes, missing value or name: {attribute}")
+                css_selector = attribute.get('css_selector', '')
+                if css_selector:
+                    name = "css_selector"
+                    value = css_selector
+                else:
+                    raise ValueError(f"Improperly formatted attributes, missing value or name: {attribute}")
 
             if name in attr:
                 attr[name].append(value)
@@ -87,8 +91,43 @@ class TargetElement(ConfigElement):
         return search_hierarchy
 
     @classmethod
-    def format_search_hierarchy_from(cls, raw_hierarchy_data: List[Dict[str, str]]) -> List[str]:
-        pass
+    def create_search_hierarchy_from_raw_hierarchy(cls, raw_hierarchy: List[Dict[str, str]]) -> List[str]:
+        """
+            Create a search hierarchy by processing a raw hierarchy of HTML attributes.
+
+            Args:
+                raw_hierarchy (List[Dict[str, str]): A list of dictionaries representing raw HTML attributes.
+
+            Returns:
+                List[str]: A list of CSS selectors generated from the processed raw HTML attributes.
+
+            This method takes a list of dictionaries, where each dictionary represents raw HTML attributes, and
+            processes them to create a search hierarchy. The raw HTML attributes are formatted and transformed into
+            CSS selectors, which are then returned as a list.
+
+            Example:
+            raw_hierarchy = [
+                {'name': 'class', 'value': 'btn active'},
+                {'name': 'id', 'value': 'submit-button'},
+                {'name': 'data-role', 'value': 'button'}
+            ]
+            create_search_hierarchy_from_raw_hierarchy(raw_hierarchy)
+            # Output: ['.btn.active', '[id=submit-button]', '[data-role=button]']
+            """
+        raw_formatted_hierarchy = [cls.collect_attributes([h_element]) for h_element in raw_hierarchy]
+
+        search_hierarchy = []
+        for formatted_attr in raw_formatted_hierarchy:
+            # check if it's already a css selector
+            p_css_selector = formatted_attr.get('css_selector', '')
+            if p_css_selector:
+                search_hierarchy.append(p_css_selector)
+                continue
+            # else format the attributes into a css and append them
+            for css_selector in cls.format_css_selectors(formatted_attr):
+                search_hierarchy.append(css_selector)
+
+        return search_hierarchy
 
     @classmethod
     def format_css_selectors(cls, formatted_attributes: Dict[str, str]) -> Generator[str, None, None]:
@@ -128,7 +167,7 @@ class TargetElement(ConfigElement):
 
             yield css_selector
 
-    def create_search_hierarchy_from_attributes(self):
+    def create_search_hierarchy_from_attributes(self, formatted_attrs: Dict[str, str]) -> None:
         """
         Creates a search hierarchy based on the current attributes.
 
@@ -136,10 +175,4 @@ class TargetElement(ConfigElement):
             Make sure the attributes have been formatted before using this method
         """
 
-        self.element_search_hierarchy = self.format_search_hierarchy_from_attributes([self.attributes])
-
-    def create_attributes_from_search_hierarchy(self):
-        """
-        Populates the attributes based on the search hierarchy.
-        """
-        raise NotImplementedError
+        self.element_search_hierarchy = self.format_search_hierarchy_from_attributes([formatted_attrs])
