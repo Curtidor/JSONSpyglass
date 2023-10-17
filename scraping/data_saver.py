@@ -1,7 +1,11 @@
 import csv
+
+from asyncio import Lock
 from typing import Dict, Any, List
 
 from utils.logger import Logger, LoggerLevel
+
+# TODO: (BUG) when the crawler has no sleep the data saves in the wrong order
 
 
 class DataSaver:
@@ -16,7 +20,7 @@ class DataSaver:
         :param save_config: Dict which specifies how the data should be saved
         :param: data_keys: List of keys in order which will be used to save the data
         """
-
+        self._lock = Lock()
         self.data_keys = data_keys
         self.save_config = save_config
         self.save_types = []
@@ -38,7 +42,7 @@ class DataSaver:
             for save_type in self.save_types:
                 clear_func = self._clear_func_mapping.get(save_type)
                 if not clear_func:
-                    Logger.console_log(f"Unknown clear type: {save_type}", LoggerLevel.WARNING)
+                    Logger.console_log(f"Unknown clear type: {save_type}", LoggerLevel.ERROR)
                     continue
                 clear_func(self.save_config.get(save_type))
 
@@ -46,25 +50,26 @@ class DataSaver:
             save_func = self._save_func_mapping.get(save_type)
 
             if not save_func:
-                Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.WARNING)
+                Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.ERROR)
                 continue
 
             save_func(self.save_config.get(save_type), self.data_keys, len(self.data_keys))
 
-    def save(self, data: Any):
+    async def save(self, data: Any) -> None:
         """
         Given data is saved based on the initialized save types and configurations
 
         :param data: Data to be saved
         """
-        for save_type in self.save_types:
-            save_func = self._save_func_mapping.get(save_type)
+        async with self._lock:
+            for save_type in self.save_types:
+                save_func = self._save_func_mapping.get(save_type)
 
-            if not save_func:
-                Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.WARNING)
-                continue
+                if not save_func:
+                    Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.WARNING)
+                    continue
 
-            save_func(self.save_config.get(save_type), data, len(self.data_keys))
+                save_func(self.save_config.get(save_type), data, len(self.data_keys))
 
     @staticmethod
     def clear_csv(clear_data: Dict[Any, Any]) -> None:
@@ -85,17 +90,17 @@ class DataSaver:
         :param csv_options: Dict containing csv saving options
         :param data: Data to be saved
         """
-
-        ALLOWED_ORIENTATIONS = ['horizontal', 'vertical']
+        BAD_FILE_PATH = 'bfp'
+        ALLOWED_ORIENTATIONS = {'horizontal', 'vertical'}
 
         # if save feature is disabled return without saving
         if not csv_options.get('enabled', True):
             return
 
-        csv_file_path = csv_options.get('file_path', 'bad_file_path')
-        orientation = csv_options.get('orientation', 'horizontal')
+        csv_file_path = csv_options.get('file_path', BAD_FILE_PATH)
+        orientation = csv_options.get('orientation', 'missing orientation')
 
-        if csv_file_path == "bad_file_path":
+        if csv_file_path == BAD_FILE_PATH:
             raise SyntaxError("No file path was given for saving csv")
 
         if orientation not in ALLOWED_ORIENTATIONS:

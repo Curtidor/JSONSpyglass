@@ -17,7 +17,7 @@ class DataParser:
 
         event_dispatcher.add_listener("scraped_data", self.parse_data)
 
-    def parse_data(self, event: Event) -> None:
+    async def parse_data(self, event: Event) -> None:
         url_element_pairs = event.data
         if not url_element_pairs:
             return
@@ -40,7 +40,7 @@ class DataParser:
                 elif attr_data and not attr_data.get('attr_name'):
                     self.log_missing_attribute_name(attr_data)
 
-        self.data_saver.save(cleaned_data)
+        await self.data_saver.save(cleaned_data)
 
     @staticmethod
     def get_elements(scraped_data_list: List[ScrapedData]) -> Generator[Tuple[ScrapedData, int], None, None]:

@@ -41,7 +41,7 @@ class DataScraper:
             scraped_data = self._process_response(response)
             all_scraped_data.extend(scraped_data)
 
-        self.event_dispatcher.trigger(Event("scraped_data", "data", data=all_scraped_data))
+        self.event_dispatcher.async_trigger_nw(Event("scraped_data", "data", data=all_scraped_data))
 
     def _process_response(self, response: Dict[str, str]) -> List[ScrapedData]:
         results = []

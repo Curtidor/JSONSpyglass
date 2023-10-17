@@ -5,8 +5,6 @@ from selectolax.parser import HTMLParser
 from models.target_element import TargetElement
 from scraping.data_scraper import DataScraper
 
-# TODO: (BUG) only the search hierarchy seems to work right now for selecting elements from html
-
 
 class TestDataScraper(unittest.TestCase):
     def setUp(self) -> None:

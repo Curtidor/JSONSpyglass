@@ -128,14 +128,20 @@ class Crawler:
 
         new_urls = set()
         while self._to_visit and self._current_depth <= self.max_depth:
+            # Log crawler status
             Logger.console_log(f"DEPTH {self._current_depth}", LoggerLevel.INFO)
 
+            # populate structure with all the urls to get responses from
             urls_to_get_responses_from = self._to_visit.pop() if self.has_crawl_delay else self._to_visit
 
+            # get the responses in the format of dict{url: scraped_response}
             response_pairs = await ResponseLoader.load_responses(
-                urls_to_get_responses_from,
+                *urls_to_get_responses_from,
                 render_pages=self.render_pages
             )
+
+            # if there's no crawl delay that means we sent all the urls to vist to be
+            # processed, so we can clear the set
             if not self.has_crawl_delay:
                 self._to_visit.clear()
             else:
@@ -172,7 +178,7 @@ class Crawler:
             if response_info.href_elements and await self._has_unique_locator(response_info):
                 # POTENTIAL DUPE BUG
                 self._response_with_href_elements.add(response_info)
-            # else if a page was used with the response, it can be recycled
+            # else if a page was used with the response, it can be recycled or closed
             elif response_info.page:
                 await BrowserManager.close_page(response_info.page, feed_into_pool=True)
 

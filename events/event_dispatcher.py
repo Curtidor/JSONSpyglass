@@ -126,6 +126,18 @@ class EventDispatcher:
             raise Exception("No event loop running")
         self._event_queue.put_nowait((self._async_trigger, event, args, kwargs))
 
+    def async_trigger_nw(self, event: Event, *args: Any, **kwargs: Any) -> None:
+        """
+        Asynchronously trigger the event and notify registered listeners without waiting.
+
+        :param event: The event to trigger.
+        :param args: Additional arguments to pass to listeners.
+        :param kwargs: Additional keyword arguments to pass to listeners.
+        """
+        if not self._is_event_loop_running:
+            raise Exception("No event loop running")
+        self._event_queue.put_nowait((self._async_trigger, event, args, kwargs))
+
     async def _async_trigger(self, event: Event, *args: Any, **kwargs: Any) -> None:
         """
         Internal method to asynchronously trigger the event and notify registered listeners.
