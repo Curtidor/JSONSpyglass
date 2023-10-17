@@ -64,25 +64,32 @@ class ConfigElementFactory:
 
         :return: TargetElement: The created TargetElement.
         """
-        tag = element_data.get('tag', "")
-        attrs = TargetElement.collect_attributes(element_data.get('attributes', []))
+        formatted_attrs = TargetElement.collect_attributes(element_data.get('attributes', []))
         search_hierarchy = element_data.get('search_hierarchy', [])
 
-        if search_hierarchy and (tag or attrs):
+        if search_hierarchy and formatted_attrs:
             raise ValueError(
                 f'Improperly formatted element, you cannot specify a search hierarchy and, '
-                f'tags and attributes on the same element: {element_data}'
+                f'attributes on the same element: {element_data}'
             )
 
-        new_element = TargetElement(element_name, element_id)
+        target_element = TargetElement(element_name, element_id)
+
+        if not formatted_attrs:
+            css_selector = element_data.get('css_selector', '')
+
+            if css_selector:
+                formatted_attrs = TargetElement.collect_attributes([{'css_selector': css_selector}])
 
         # Convert attributes into a search hierarchy to simplify the scraping process.
         if search_hierarchy:
-            new_element.element_search_hierarchy = TargetElement.create_search_hierarchy_from_raw_hierarchy(search_hierarchy)
+            target_element.search_hierarchy = TargetElement.create_search_hierarchy_from_raw_hierarchy(search_hierarchy)
+        elif formatted_attrs:
+            target_element.create_search_hierarchy_from_attributes(formatted_attrs)
         else:
-            new_element.create_search_hierarchy_from_attributes(attrs)
+            raise ValueError(f'Missing either a search hierarchy or a attribute selector {formatted_attrs}')
 
-        return new_element
+        return target_element
 
     @staticmethod
     def _sort_elements(element_selectors: List[TargetElement], data_order: List[str]) -> None:

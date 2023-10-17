@@ -1,7 +1,6 @@
 from typing import Generator, List
 from dataclasses import dataclass
 
-from bs4 import ResultSet, PageElement
 from selectolax.parser import Node
 
 

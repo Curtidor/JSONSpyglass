@@ -6,7 +6,7 @@ from dataclasses import dataclass
 class TargetElement:
     name: str
     element_id: int
-    element_search_hierarchy: List[str] = None
+    search_hierarchy: List[str] = None
 
     @staticmethod
     def collect_attributes(attributes: List[Dict[str, str]]) -> Dict[str, str]:
@@ -160,10 +160,13 @@ class TargetElement:
 
         for attr_name, values in formatted_attributes.items():
             if not values:
-                raise ValueError(f"improperly formatted attribute, missing name or value: {formatted_attributes}")
+                raise ValueError(f"improperly formatted attribute, value: {formatted_attributes} {attr_name}")
 
-            css_selector = f".{'.'.join(values.split())}" if attr_name == CLASS_ATTR \
-                else f"[{attr_name}={values}]"
+            if attr_name == 'css_selector':
+                css_selector = values
+            else:
+                css_selector = f".{'.'.join(values.split())}" if attr_name == CLASS_ATTR \
+                    else f"[{attr_name}={values}]"
 
             yield css_selector
 
@@ -175,4 +178,4 @@ class TargetElement:
             Make sure the attributes have been formatted before using this method
         """
 
-        self.element_search_hierarchy = self.format_search_hierarchy_from_attributes([formatted_attrs])
+        self.search_hierarchy = self.format_search_hierarchy_from_attributes([formatted_attrs])

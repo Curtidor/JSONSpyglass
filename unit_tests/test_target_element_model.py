@@ -82,10 +82,10 @@ class TestTargetElementModel(unittest.TestCase):
 
         element = TargetElement("test_element", 0)
 
-        element.element_search_hierarchy = TargetElement.format_search_hierarchy_from_attributes([attrs])
+        element.search_hierarchy = TargetElement.format_search_hierarchy_from_attributes([attrs])
 
         expected_out = [".price_color.price_amount", "[id=1]"]
-        self.assertEqual(expected_out, element.element_search_hierarchy)
+        self.assertEqual(expected_out, element.search_hierarchy)
 
     def test_search_hierarchy_from_raw_hierarchy(self):
         hierarchy = TargetElement.create_search_hierarchy_from_raw_hierarchy(self.search_hierarchy_raw_one)

@@ -1,24 +1,23 @@
 import asyncio
 
-from scraping.data_parser import DataParser
 from events.event_dispatcher import EventDispatcher
-from loaders.config_loader import ConfigLoader
-from loaders.response_loader import ResponseLoader
+from factories.config_element_factory import ConfigElementFactory
+from scraping.data_parser import DataParser
 from scraping.data_saver import DataSaver
 from scraping.data_scraper import DataScraper
-from factories.config_element_factory import ConfigElementFactory
+from loaders.config_loader import ConfigLoader
+from loaders.response_loader import ResponseLoader
 
 # TODO: (FEATURE) add a feature to scrape multiple of the same element
 
 
-async def load_and_scrape_data():
+async def load_and_scrape_data(config_path: str) -> None:
     # Load and configure the event dispatcher
     event_dispatcher = EventDispatcher(debug_mode=True)
     event_dispatcher.start()
 
     # Load the configuration
-    # config = ConfigLoader('configs/scrap_this_site.com/Oscar_Winning_Films_AJAX_and_Javascript.json')
-    config = ConfigLoader('configs/books.toscrape.com.json')
+    config = ConfigLoader(config_path)
 
     # Create elements from the configuration
     elements = ConfigElementFactory.create_elements(config.get_raw_target_elements(), config.get_data_order())
@@ -43,7 +42,7 @@ async def load_and_scrape_data():
 def main():
     print("STARTING...")
 
-    asyncio.run(load_and_scrape_data())
+    asyncio.run(load_and_scrape_data('configs/books.toscrape.com.json'))
 
     print("END...")
 

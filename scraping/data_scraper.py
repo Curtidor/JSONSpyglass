@@ -55,7 +55,8 @@ class DataScraper:
             for element in self.elements:
                 if not element:
                     continue
-                results.append(self._collect_scraped_data(url, parser, element))
+                scraped_data = self._collect_scraped_data(url, parser, element)
+                results.append(scraped_data)
 
         return results
 
@@ -78,12 +79,12 @@ class DataScraper:
             ScrapedData: An instance containing the collected data.
         """
         result_set = parser.css(
-            target_element.element_search_hierarchy[0]) if target_element.element_search_hierarchy else []
+            target_element.search_hierarchy[0]) if target_element.search_hierarchy else []
 
-        if len(target_element.element_search_hierarchy) <= 1:
+        if len(target_element.search_hierarchy) <= 1:
             return ScrapedData(url, result_set, target_element.element_id)
 
-        for attr in target_element.element_search_hierarchy[1:]:
+        for attr in target_element.search_hierarchy[1:]:
             new_result_set = []
             for tag in result_set:
                 temp_result_set = tag.css(attr)
