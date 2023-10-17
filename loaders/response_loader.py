@@ -186,7 +186,7 @@ class ResponseLoader:
                     return ScrapedResponse(html, response.status, url=url)
 
     @classmethod
-    async def load_responses(cls, *urls, render_pages: bool = False) -> Dict[str, ScrapedResponse]:
+    async def load_responses(cls, urls: Set[str], render_pages: bool = False) -> Dict[str, ScrapedResponse]:
         """
         Load and retrieve responses from the specified URLs.
 
@@ -201,8 +201,6 @@ class ResponseLoader:
             This method loads responses from the provided URLs. If rendering pages is enabled, it will render pages
             with JavaScript. The method triggers a "new_responses" event with the loaded response data.
         """
-
-        urls = set(urls)
 
         response_method = cls.get_rendered_response if render_pages \
             else cls.get_response

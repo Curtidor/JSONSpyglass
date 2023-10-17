@@ -132,11 +132,10 @@ class Crawler:
             Logger.console_log(f"DEPTH {self._current_depth}", LoggerLevel.INFO)
 
             # populate structure with all the urls to get responses from
-            urls_to_get_responses_from = self._to_visit.pop() if self.has_crawl_delay else self._to_visit
+            urls_to_get_responses_from = {self._to_visit.pop()} if self.has_crawl_delay else self._to_visit
 
-            # get the responses in the format of dict{url: scraped_response}
             response_pairs = await ResponseLoader.load_responses(
-                *urls_to_get_responses_from,
+                urls_to_get_responses_from,
                 render_pages=self.render_pages
             )
 
@@ -204,7 +203,7 @@ class Crawler:
                 await click_element.click()
 
                 # get the response from the page we just navigated to
-                responses = await ResponseLoader.load_responses(scraped_response.page.url, render_pages=True)
+                responses = await ResponseLoader.load_responses({scraped_response.page.url}, render_pages=True)
 
                 if not responses:
                     continue
