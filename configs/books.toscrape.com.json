@@ -8,7 +8,7 @@
       },
       "crawler": {
         "ignore_robots_txt": true,
-        "crawl_delay": 0.01,
+        "crawl_delay": 0.001,
         "max_depth": 6,
         "allowed_domains": ["books.toscrape.com"]
       }

@@ -1,7 +1,11 @@
-import csv
+import aiofiles
+
+from asyncio import Lock
 from typing import Dict, Any, List
 
 from utils.logger import Logger, LoggerLevel
+
+# TODO: (BUG) when the crawler has no sleep the data saves in the wrong order
 
 
 class DataSaver:
@@ -16,7 +20,7 @@ class DataSaver:
         :param save_config: Dict which specifies how the data should be saved
         :param: data_keys: List of keys in order which will be used to save the data
         """
-
+        self._lock = Lock()
         self.data_keys = data_keys
         self.save_config = save_config
         self.save_types = []
@@ -33,12 +37,12 @@ class DataSaver:
             'csv': self.clear_csv
         }
 
-    def setup(self, clear: bool = False) -> None:
+    async def setup(self, clear: bool = False) -> None:
         if clear:
             for save_type in self.save_types:
                 clear_func = self._clear_func_mapping.get(save_type)
                 if not clear_func:
-                    Logger.console_log(f"Unknown clear type: {save_type}", LoggerLevel.WARNING)
+                    Logger.console_log(f"Unknown clear type: {save_type}", LoggerLevel.ERROR)
                     continue
                 clear_func(self.save_config.get(save_type))
 
@@ -46,12 +50,12 @@ class DataSaver:
             save_func = self._save_func_mapping.get(save_type)
 
             if not save_func:
-                Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.WARNING)
+                Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.ERROR)
                 continue
 
-            save_func(self.save_config.get(save_type), self.data_keys, len(self.data_keys))
+            await save_func(self.save_config.get(save_type), self.data_keys, len(self.data_keys), self._lock)
 
-    def save(self, data: Any):
+    async def save(self, data: Any) -> None:
         """
         Given data is saved based on the initialized save types and configurations
 
@@ -64,7 +68,7 @@ class DataSaver:
                 Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.WARNING)
                 continue
 
-            save_func(self.save_config.get(save_type), data, len(self.data_keys))
+            await save_func(self.save_config.get(save_type), data, len(self.data_keys), self._lock)
 
     @staticmethod
     def clear_csv(clear_data: Dict[Any, Any]) -> None:
@@ -77,53 +81,56 @@ class DataSaver:
             file.truncate(0)
 
     @staticmethod
-    def save_csv(csv_options: Dict[Any, Any], data: Any, t_items: int) -> None:
+    async def save_csv(csv_options: Dict[Any, Any], data: Any, t_items: int, lock: Lock) -> None:
         """
         Data is saved in a csv file based on the specified options
 
+        :param lock:
         :param t_items: how many total items there are
         :param csv_options: Dict containing csv saving options
         :param data: Data to be saved
         """
+        async with lock:
+            BAD_FILE_PATH = 'bfp'
+            ALLOWED_ORIENTATIONS = {'horizontal', 'vertical'}
 
-        ALLOWED_ORIENTATIONS = ['horizontal', 'vertical']
+            # if save feature is disabled return without saving
+            if not csv_options.get('enabled', True):
+                return
 
-        # if save feature is disabled return without saving
-        if not csv_options.get('enabled', True):
-            return
+            csv_file_path = csv_options.get('file_path', BAD_FILE_PATH)
+            orientation = csv_options.get('orientation', 'missing orientation')
 
-        csv_file_path = csv_options.get('file_path', 'bad_file_path')
-        orientation = csv_options.get('orientation', 'horizontal')
+            if csv_file_path == BAD_FILE_PATH:
+                raise SyntaxError("No file path was given for saving csv")
 
-        if csv_file_path == "bad_file_path":
-            raise SyntaxError("No file path was given for saving csv")
+            if orientation not in ALLOWED_ORIENTATIONS:
+                raise ValueError(f"Unknown orientation: {orientation}, allowed orientations are => {ALLOWED_ORIENTATIONS} ")
 
-        if orientation not in ALLOWED_ORIENTATIONS:
-            raise ValueError(f"Unknown orientation: {orientation}, allowed orientations are => {ALLOWED_ORIENTATIONS} ")
+            ordered_data = [[] for _ in range(t_items)]
 
-        ordered_data = [[] for _ in range(t_items)]
+            for index, item in enumerate(ordered_data):
+                item.extend(data[index::len(ordered_data)])
 
-        for index, item in enumerate(ordered_data):
-            item.extend(data[index::len(ordered_data)])
+            async with aiofiles.open(csv_file_path, mode='a', newline='') as csv_file:
 
-        with open(csv_file_path, mode='a', newline='') as csv_file:
-            csv_writer = csv.writer(csv_file)
-            # horizontal means item names are on the side
-            if orientation == 'horizontal':
-                csv_writer.writerows(ordered_data)
-            # else its vertical which means item names are on the top
-            else:
-                csv_writer.writerows(zip(*ordered_data))
+                if orientation == 'horizontal':
+                    # Write the rows as-is
+                    await csv_file.writelines([','.join(row) + '\n' for row in ordered_data])
+                else:
+                    # Transpose the data and write it
+                    transposed_data = [list(row) for row in zip(*ordered_data)]
+                    await csv_file.writelines([','.join(row) + '\n' for row in transposed_data])
 
     @staticmethod
-    def save_txt(txt_options: Dict[Any, Any], data: Any, t_items: int) -> None:
+    async def save_txt(txt_options: Dict[Any, Any], data: Any, t_items: int, lock: Lock) -> None:
         """
         Placeholder for future implementation of txt saving feature
         """
         raise NotImplementedError("This feature will be added soon!")
 
     @staticmethod
-    def save_database(db_options: Dict[Any, Any], data: Any, t_items: int) -> None:
+    async def save_database(db_options: Dict[Any, Any], data: Any, t_items: int, lock: Lock) -> None:
         """
         Placeholder for future implementation of database saving feature
         """

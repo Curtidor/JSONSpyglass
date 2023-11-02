@@ -1,16 +1,16 @@
-from typing import List, Dict, Union
-from bs4 import BeautifulSoup, ResultSet
+from typing import List, Dict
+from selectolax.parser import HTMLParser
 
 from events.event_dispatcher import EventDispatcher, Event
 from loaders.config_loader import ConfigLoader
 from models.scarped_data import ScrapedData
-from factories.config_element_factory import ConfigElementFactory, TargetElement, SelectorElement
+from models.target_element import TargetElement
 
 
 class DataScraper:
     def __init__(self,
                  config: ConfigLoader,
-                 elements: List[Union[SelectorElement, TargetElement]],
+                 elements: List[TargetElement],
                  event_dispatcher: EventDispatcher):
         """
         Initialize the DataScraper class.
@@ -41,73 +41,48 @@ class DataScraper:
             scraped_data = self._process_response(response)
             all_scraped_data.extend(scraped_data)
 
-        self.event_dispatcher.trigger(Event("scraped_data", "data", data=all_scraped_data))
+        self.event_dispatcher.async_trigger_nw(Event("scraped_data", "data", data=all_scraped_data))
 
     def _process_response(self, response: Dict[str, str]) -> List[ScrapedData]:
         results = []
 
         for url, content in response.items():
-            soup = BeautifulSoup(content, "html.parser")
+            parser = HTMLParser(content)
 
             if self.config.only_scrape_sub_pages(url):
                 continue
 
             for element in self.elements:
-                if not element:
-                    continue
-                results.append(self._collect_scraped_data(url, soup, element))
+                scraped_data = self.collect_all_target_elements(url, element, parser)
+                results.append(scraped_data)
 
         return results
 
-    def _collect_scraped_data(self, url: str, soup: BeautifulSoup, element: Union[TargetElement, SelectorElement]) -> ScrapedData:
-        if element.element_type == ConfigElementFactory.ELEMENT_SELECTOR:
-            data = self._collect_all_selector_elements(url, element, soup)
-        else:
-            data = self._collect_all_target_elements(url, element, soup)
-
-        return data
-
     @staticmethod
-    def _collect_all_target_elements(url: str, target_element: TargetElement, soup: BeautifulSoup) -> ScrapedData:
+    def collect_all_target_elements(url: str, target_element: TargetElement, parser: HTMLParser) -> ScrapedData:
         """
         Collect data from all target elements specified by the TargetElement.
 
         Args:
             url (str): The URL of the web page.
             target_element (TargetElement): The TargetElement instance representing the element to collect data from.
-            soup (BeautifulSoup): The BeautifulSoup instance representing the parsed HTML content.
+            parser (HTMLParser): The Selectolax HTMLParser instance representing the parsed HTML content.
 
         Returns:
             ScrapedData: An instance containing the collected data.
         """
-        result_set: ResultSet = soup.find_all(
-            attrs=target_element.element_search_hierarchy[0]) if target_element.element_search_hierarchy else []
+        result_set = parser.css(
+            target_element.search_hierarchy[0]) if target_element.search_hierarchy else []
 
-        if len(target_element.element_search_hierarchy) <= 1:
+        if len(target_element.search_hierarchy) <= 1:
             return ScrapedData(url, result_set, target_element.element_id)
 
-        for attr in target_element.element_search_hierarchy[1:]:
+        for attr in target_element.search_hierarchy[1:]:
+            new_result_set = []
             for tag in result_set:
-                temp_result_set = tag.find_all(attrs=attr)
+                temp_result_set = tag.css(attr)
                 if temp_result_set:
-                    result_set = temp_result_set
-                else:
-                    return ScrapedData(url, result_set, target_element.element_id)
+                    new_result_set.extend(temp_result_set)
+            result_set = new_result_set
 
         return ScrapedData(url, result_set, target_element.element_id)
-
-    @staticmethod
-    def _collect_all_selector_elements(url: str, selector_element: SelectorElement, soup: BeautifulSoup) -> ScrapedData:
-        """
-        Collect data from all selector elements specified by the SelectorElement.
-
-        Args:
-            url (str): The URL of the web page.
-            selector_element (SelectorElement): The SelectorElement instance representing the element to collect data from.
-            soup (BeautifulSoup): The BeautifulSoup instance representing the parsed HTML content.
-
-        Returns:
-            ScrapedData: An instance containing the collected data.
-        """
-        return ScrapedData(url, soup.select(selector_element.css_selector), selector_element.element_id)
-

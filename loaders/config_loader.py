@@ -68,7 +68,6 @@ class ConfigLoader:
             ValueError: If no valid URLs are found in the configuration.
         """
         urls = [url.get('url') for url in self.config_data.get("target_urls", []) if url.get('url')]
-
         if not urls:
             raise ValueError(f"No valid URLs found in config: {self.config_file_path}")
 
@@ -84,7 +83,8 @@ class ConfigLoader:
         NO_CRAWLER_FOUND = 'no_crawler_found'
 
         seeds = self.get_target_urls()
-        # for every url get it's related crawler options
+        # loop over all the target urls and try and get the crawler settings related to the url
+        # the crawler_options_collection is a list of the json data for each crawler in the config file
         crawler_options_collection = [crawler_data.get('crawler', NO_CRAWLER_FOUND) for crawler_data in
                                       self.config_data.get('target_urls')]
         # for every target_url there's an url, so we can safely use the index from crawler_options_collection to
@@ -96,6 +96,7 @@ class ConfigLoader:
                 # create a default crawler if one was not specified
                 crawler = Crawler(seeds[index], [ResponseLoader.get_domain(seeds[index])],
                                   render_pages=render_pages)
+            # else a crawler was specified, and we will use that data to initialize the crawler
             else:
                 crawler = Crawler(seeds[index], [], render_pages=render_pages)
                 Deserializer.deserialize(crawler, crawler_options_raw_data)
@@ -128,10 +129,8 @@ class ConfigLoader:
             element_type = "BAD SELECTOR"
             # we treat search hierarchies the same as target elements as all target elements are
             # formatted into search hierarchies
-            if element.get('tag', "") or element.get('search_hierarchy'):
+            if element.get('search_hierarchy', '') or element.get('css_selector', ''):
                 element_type = "target"
-            elif element.get('css_selector', ""):
-                element_type = "selector"
 
             yield element_type, element
 
