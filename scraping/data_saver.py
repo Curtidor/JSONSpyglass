@@ -1,4 +1,4 @@
-import csv
+import aiofiles
 
 from asyncio import Lock
 from typing import Dict, Any, List
@@ -37,7 +37,7 @@ class DataSaver:
             'csv': self.clear_csv
         }
 
-    def setup(self, clear: bool = False) -> None:
+    async def setup(self, clear: bool = False) -> None:
         if clear:
             for save_type in self.save_types:
                 clear_func = self._clear_func_mapping.get(save_type)
@@ -53,7 +53,7 @@ class DataSaver:
                 Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.ERROR)
                 continue
 
-            save_func(self.save_config.get(save_type), self.data_keys, len(self.data_keys))
+            await save_func(self.save_config.get(save_type), self.data_keys, len(self.data_keys), self._lock)
 
     async def save(self, data: Any) -> None:
         """
@@ -61,15 +61,14 @@ class DataSaver:
 
         :param data: Data to be saved
         """
-        async with self._lock:
-            for save_type in self.save_types:
-                save_func = self._save_func_mapping.get(save_type)
+        for save_type in self.save_types:
+            save_func = self._save_func_mapping.get(save_type)
 
-                if not save_func:
-                    Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.WARNING)
-                    continue
+            if not save_func:
+                Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.WARNING)
+                continue
 
-                save_func(self.save_config.get(save_type), data, len(self.data_keys))
+            await save_func(self.save_config.get(save_type), data, len(self.data_keys), self._lock)
 
     @staticmethod
     def clear_csv(clear_data: Dict[Any, Any]) -> None:
@@ -82,53 +81,56 @@ class DataSaver:
             file.truncate(0)
 
     @staticmethod
-    def save_csv(csv_options: Dict[Any, Any], data: Any, t_items: int) -> None:
+    async def save_csv(csv_options: Dict[Any, Any], data: Any, t_items: int, lock: Lock) -> None:
         """
         Data is saved in a csv file based on the specified options
 
+        :param lock:
         :param t_items: how many total items there are
         :param csv_options: Dict containing csv saving options
         :param data: Data to be saved
         """
-        BAD_FILE_PATH = 'bfp'
-        ALLOWED_ORIENTATIONS = {'horizontal', 'vertical'}
+        async with lock:
+            BAD_FILE_PATH = 'bfp'
+            ALLOWED_ORIENTATIONS = {'horizontal', 'vertical'}
 
-        # if save feature is disabled return without saving
-        if not csv_options.get('enabled', True):
-            return
+            # if save feature is disabled return without saving
+            if not csv_options.get('enabled', True):
+                return
 
-        csv_file_path = csv_options.get('file_path', BAD_FILE_PATH)
-        orientation = csv_options.get('orientation', 'missing orientation')
+            csv_file_path = csv_options.get('file_path', BAD_FILE_PATH)
+            orientation = csv_options.get('orientation', 'missing orientation')
 
-        if csv_file_path == BAD_FILE_PATH:
-            raise SyntaxError("No file path was given for saving csv")
+            if csv_file_path == BAD_FILE_PATH:
+                raise SyntaxError("No file path was given for saving csv")
 
-        if orientation not in ALLOWED_ORIENTATIONS:
-            raise ValueError(f"Unknown orientation: {orientation}, allowed orientations are => {ALLOWED_ORIENTATIONS} ")
+            if orientation not in ALLOWED_ORIENTATIONS:
+                raise ValueError(f"Unknown orientation: {orientation}, allowed orientations are => {ALLOWED_ORIENTATIONS} ")
 
-        ordered_data = [[] for _ in range(t_items)]
+            ordered_data = [[] for _ in range(t_items)]
 
-        for index, item in enumerate(ordered_data):
-            item.extend(data[index::len(ordered_data)])
+            for index, item in enumerate(ordered_data):
+                item.extend(data[index::len(ordered_data)])
 
-        with open(csv_file_path, mode='a', newline='') as csv_file:
-            csv_writer = csv.writer(csv_file)
-            # horizontal means item names are on the side
-            if orientation == 'horizontal':
-                csv_writer.writerows(ordered_data)
-            # else its vertical which means item names are on the top
-            else:
-                csv_writer.writerows(zip(*ordered_data))
+            async with aiofiles.open(csv_file_path, mode='a', newline='') as csv_file:
+
+                if orientation == 'horizontal':
+                    # Write the rows as-is
+                    await csv_file.writelines([','.join(row) + '\n' for row in ordered_data])
+                else:
+                    # Transpose the data and write it
+                    transposed_data = [list(row) for row in zip(*ordered_data)]
+                    await csv_file.writelines([','.join(row) + '\n' for row in transposed_data])
 
     @staticmethod
-    def save_txt(txt_options: Dict[Any, Any], data: Any, t_items: int) -> None:
+    async def save_txt(txt_options: Dict[Any, Any], data: Any, t_items: int, lock: Lock) -> None:
         """
         Placeholder for future implementation of txt saving feature
         """
         raise NotImplementedError("This feature will be added soon!")
 
     @staticmethod
-    def save_database(db_options: Dict[Any, Any], data: Any, t_items: int) -> None:
+    async def save_database(db_options: Dict[Any, Any], data: Any, t_items: int, lock: Lock) -> None:
         """
         Placeholder for future implementation of database saving feature
         """

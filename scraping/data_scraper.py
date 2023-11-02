@@ -53,17 +53,10 @@ class DataScraper:
                 continue
 
             for element in self.elements:
-                if not element:
-                    continue
-                scraped_data = self._collect_scraped_data(url, parser, element)
+                scraped_data = self.collect_all_target_elements(url, element, parser)
                 results.append(scraped_data)
 
         return results
-
-    def _collect_scraped_data(self, url: str, parser: HTMLParser, element: TargetElement) -> ScrapedData:
-        data = self.collect_all_target_elements(url, element, parser)
-
-        return data
 
     @staticmethod
     def collect_all_target_elements(url: str, target_element: TargetElement, parser: HTMLParser) -> ScrapedData:

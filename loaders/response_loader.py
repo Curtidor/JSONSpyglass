@@ -88,6 +88,25 @@ class ResponseLoader:
         return normalized_url
 
     @classmethod
+    async def wait_for_page_load(cls, page: Page, timeout_time: float = 30) -> None:
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(
+                    # ERROR: the load event is creating time out errors
+                    page.wait_for_load_state("load", timeout=timeout_time),
+                    page.wait_for_load_state("networkidle", timeout=timeout_time),
+                ),
+                timeout=timeout_time / 1000  # Convert back to seconds
+            )
+        except asyncio.TimeoutError as te:
+            Logger.console_log(
+                f"TIME OUT ERROR WHEN WAITING FOR [load state]: {te}\n"
+                f"URL: {page.url}",
+                LoggerLevel.WARNING,
+                include_time=True
+            )
+
+    @classmethod
     async def get_rendered_response(cls, url: str, timeout_time: float = 30) -> ScrapedResponse:
         """
         Get the rendered HTML response content of a web page.
@@ -118,25 +137,7 @@ class ResponseLoader:
 
             page.on("requestfinished", request_finished_callback)
 
-            try:
-                pass
-                """"
-                await asyncio.wait_for(
-                    asyncio.gather(
-                        # ERROR: the load event is creating time out errors
-                        page.wait_for_load_state("load", timeout=timeout_time),
-                        page.wait_for_load_state("networkidle", timeout=timeout_time),
-                    ),
-                    timeout=timeout_time / 1000  # Convert back to seconds
-                )
-                """
-            except asyncio.TimeoutError as te:
-                Logger.console_log(
-                    f"TIME OUT ERROR WHEN WAITING FOR [load state]: {te}\n"
-                    f"URL: {url}",
-                    LoggerLevel.WARNING,
-                    include_time=True
-                )
+            await cls.wait_for_page_load(page, timeout_time)
 
             html = ""
             try:

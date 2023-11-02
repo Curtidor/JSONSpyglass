@@ -13,7 +13,7 @@ from loaders.response_loader import ResponseLoader
 
 async def load_and_scrape_data(config_path: str) -> None:
     # Load and configure the event dispatcher
-    event_dispatcher = EventDispatcher(debug_mode=True)
+    event_dispatcher = EventDispatcher(debug_mode=False)
     event_dispatcher.start()
 
     # Load the configuration
@@ -24,7 +24,7 @@ async def load_and_scrape_data(config_path: str) -> None:
 
     # Configure and set up the data saver
     data_saver = DataSaver(config.get_saving_data(), config.get_data_order())
-    data_saver.setup(clear=True)
+    await data_saver.setup(clear=True)
 
     # Initialize data scraper and parser
     DataScraper(config, elements, event_dispatcher)
@@ -43,6 +43,7 @@ def main():
     print("STARTING...")
 
     asyncio.run(load_and_scrape_data('configs/books.toscrape.com.json'))
+    # asyncio.run(load_and_scrape_data('configs/scrap_this_site.com/Oscar_Winning_Films_AJAX_and_Javascript.json'))
 
     print("END...")
 

@@ -29,9 +29,10 @@ class PagePool:
     @classmethod
     async def get_page(cls) -> Page:
         async with cls._lock:
-            if not cls._pool.empty():
-                return await cls._pool.get()
-        return await BrowserManager.create_new_page()
+            # if not cls._pool.empty():
+            return await cls._pool.get()
+
+    # return await BrowserManager.create_new_page()
 
     @classmethod
     async def put_page_back(cls, page: Page) -> bool:
