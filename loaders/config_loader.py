@@ -1,10 +1,11 @@
 import json
+import logging
 
 from typing import Dict, List, Any, Tuple, Generator
 
 from loaders.response_loader import ResponseLoader
 from scraping.crawler import Crawler
-from utils.logger import Logger, LoggerLevel
+from utils.clogger import CLogger
 from utils.deserializer import Deserializer
 
 
@@ -31,10 +32,14 @@ class ConfigLoader:
 
         self._total_elements = 0
         self._element_names = set()
+
         self._target_url_table = {}
         self._parsing_options_cache = {}
+
         self._build_target_url_table()
         self.format_config()
+
+        self._logger = CLogger("ConfigLoafer", logging.INFO, {logging.StreamHandler(): logging.INFO})
 
     def load_config(self) -> dict:
         """
@@ -66,7 +71,6 @@ class ConfigLoader:
             ValueError: If no valid URLs are found in the configuration.
         """
         urls = [url.get('url') for url in self.config_data.get("target_urls", []) if url.get('url')]
-
         if not urls:
             raise ValueError(f"No valid URLs found in config: {self.config_file_path}")
 
@@ -79,21 +83,27 @@ class ConfigLoader:
         Yields:
             Crawler: A Crawler instance.
         """
-        seeds = self.get_target_urls()
         NO_CRAWLER_FOUND = 'no_crawler_found'
+
+        seeds = self.get_target_urls()
+        # loop over all the target urls and try and get the crawler settings related to the url
+        # the crawler_options_collection is a list of the json data for each crawler in the config file
         crawler_options_collection = [crawler_data.get('crawler', NO_CRAWLER_FOUND) for crawler_data in
                                       self.config_data.get('target_urls')]
         # for every target_url there's an url, so we can safely use the index from crawler_options_collection to
         # index the seeds list as they are in the same order and of the same length
         for index, crawler_options_raw_data in enumerate(crawler_options_collection):
+            # a flag to indicate if the crawler needs to render each url
             render_pages = self._target_url_table.get(seeds[index], {}).get('render_pages', False)
             if crawler_options_raw_data == NO_CRAWLER_FOUND:
-                crawler_options = Crawler(seeds[index], [ResponseLoader.get_domain(seeds[index])],
-                                          render_pages=render_pages)
+                # create a default crawler if one was not specified
+                crawler = Crawler(seeds[index], [ResponseLoader.get_domain(seeds[index])],
+                                  render_pages=render_pages)
+            # else a crawler was specified, and we will use that data to initialize the crawler
             else:
-                crawler_options = Deserializer.deserialize(Crawler(seeds[index], [], render_pages=render_pages),
-                                                           crawler_options_raw_data)
-            yield crawler_options
+                crawler = Crawler(seeds[index], [], render_pages=render_pages)
+                Deserializer.deserialize(crawler, crawler_options_raw_data)
+            yield crawler
 
     def only_scrape_sub_pages(self, url: str) -> bool:
         """
@@ -122,10 +132,8 @@ class ConfigLoader:
             element_type = "BAD SELECTOR"
             # we treat search hierarchies the same as target elements as all target elements are
             # formatted into search hierarchies
-            if element.get('tag', "") or element.get('search_hierarchy'):
+            if element.get('search_hierarchy', '') or element.get('css_selector', ''):
                 element_type = "target"
-            elif element.get('css_selector', ""):
-                element_type = "selector"
 
             yield element_type, element
 
@@ -150,9 +158,7 @@ class ConfigLoader:
 
             element_parsing_data = element.get('data_parsing', '')
             if not element_parsing_data:
-                Logger.console_log(
-                    f"element has no data parsing options specified, collect data will be ignored: {element}",
-                    LoggerLevel.WARNING)
+                self._logger.info(f"element has no data parsing options specified, collect data will be ignored: {element}")
             else:
                 self._parsing_options_cache.update({element_id: element_parsing_data})
 
@@ -214,8 +220,7 @@ class ConfigLoader:
             options = url_data.get('options', {})
             self._target_url_table.update({url: self._build_options(url, options)})
 
-    @staticmethod
-    def _build_options(url: str, options: Dict) -> Dict[str, bool]:
+    def _build_options(self, url: str, options: Dict) -> Dict[str, bool]:
         """
         Build options for a target URL with default values.
 
@@ -229,8 +234,8 @@ class ConfigLoader:
         DEFAULT_OPTIONS = {'only_scrape_sub_pages': True, 'render_pages': False}
         for option in DEFAULT_OPTIONS:
             if options.get(option) is None:
-                Logger.console_log(
-                    f"missing options argument in target url: {url} missing option: {option}, defaulting to {DEFAULT_OPTIONS[option]}",
-                    LoggerLevel.WARNING)
+                self._logger.warning(
+                    f"missing options argument in target url: {url} missing option: {option}, defaulting to {DEFAULT_OPTIONS[option]}"
+                )
                 options.update({option: DEFAULT_OPTIONS[option]})
         return options

@@ -8,12 +8,6 @@ class Deserializer:
     This Deserializer class is intended to be a simple tool used within the project and is not meant to be used
     as a full-fledged deserializer. It provides a simple deserialization mechanism for basic cases.
 
-    Args:
-        cls (Type): The class type to which the JSON data will be deserialized.
-        json_data (dict): A dictionary containing the JSON data to be deserialized.
-
-    Returns:
-        Type: The class object with attributes updated based on the JSON data.
 
     Example:
         Consider the following class and JSON data:

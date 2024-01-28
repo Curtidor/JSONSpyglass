@@ -1,11 +1,17 @@
 import asyncio
+import logging
 import re
 
-from typing import List, Generator, Any, Union, Dict
+from typing import List, Any, Generator, Iterable, Set, Dict
 from urllib.robotparser import RobotFileParser
-from selectolax.parser import HTMLParser
 
-from loaders.response_loader import ResponseLoader, ResponseInformation
+from playwright.async_api import Locator
+
+from loaders.response_loader import ResponseLoader, ScrapedResponse
+from utils.clogger import CLogger
+from .page_manager import BrowserManager
+
+# TODO (SPEED AND EFFICIENCY IMPROVEMENT) Need work on page management pages are closed to soon
 
 
 class Crawler:
@@ -43,21 +49,24 @@ class Crawler:
         self.url_patterns = url_patters
 
         self._current_depth = 0
+        self._loop = None
         self._to_visit = set()
         self._visited = set()
-        self._loop = None
+        self._clicked_elements = set()
         self._running_tasks = set()
+
+        self._response_with_href_elements: Set[ScrapedResponse] = set()
+        self._processed_href_locators: Set[Locator] = set()
 
         # robot.txt parser
         self._robot_parser = RobotFileParser()
         self._robot_parser.set_url(self._get_robot_txt_url())
         self._robot_parser.read()
 
-        # debug variables
-        self._total_link_build_attempts = 0
-
         # set event loop
         self._set_event_loop(loop=loop)
+
+        self._logger = CLogger("Crawler", logging.INFO, {logging.StreamHandler(): logging.INFO})
 
     @property
     def has_crawl_delay(self) -> bool:
@@ -75,58 +84,80 @@ class Crawler:
         """
         if not self.ignore_robots_txt:
             crawl_delay = self._robot_parser.crawl_delay(self.user_agent)
+            # if the robot.txt file specifies a crawl delay use it else use the one specified by the user
             self.crawl_delay = crawl_delay if crawl_delay else self.crawl_delay
+
+        # add the initial link to the to-vist set
         self._to_visit.add(self.seed)
+
         task = self._loop.create_task(self._run())
         self._running_tasks.add(task)
 
-    async def exit(self):
+    async def exit(self) -> None:
         """
-        Print summary statistics on exit.
+        Waits for all crawling task to finish and print summary statistics on exit.
         """
         await asyncio.gather(*self._running_tasks)
+        await BrowserManager.close()
+
         print("TOTAL SITES VISITED:", len(self._visited))
-        print("TOTAL ATTEMPTED LINK BUILDS:", self._total_link_build_attempts)
         print("SITES TO VISIT:", len(self._to_visit))
 
-    def extract_links(self, base_url: str, html: str) -> Generator[str, Any, Any]:
+    def collect_child_urls_from_responses(self, urls: Iterable[str], scraped_responses: Iterable[ScrapedResponse]) \
+            -> Generator[str, Any, Any]:
         """
-        Extract hrefs from the HTML and try to build URLs from them.
+        Collect URLs from scraped responses.
 
         Args:
-            base_url (str): The base URL of the HTML page.
-            html (str): The HTML content to extract links from.
+            urls (Iterable[str]): Iterable of base URLs.
+            scraped_responses (Iterable[ScrapedResponse]): Iterable of scraped responses.
 
         Yields:
-            str: The extracted URLs.
+            str:  URLs that meet the specified conditions.
         """
-        parser = HTMLParser(html)
-        for a_tag in parser.css("a"):
-            href = a_tag.attributes.get("href")
-            self._total_link_build_attempts += 1
-            yield ResponseLoader.build_link(base_url, href)
+        for base_url, response in zip(urls, scraped_responses):
+            # iterate through each href in the html
+            for href in ResponseLoader.get_hrefs_from_html(response.html):
+                child_url = ResponseLoader.build_link(base_url, href)
+                if child_url not in self._visited and self._is_url_allowed(child_url):
+                    yield child_url
+                self._visited.add(child_url)
 
     async def _run(self):
         """
         Internal method to perform the crawling asynchronously.
         """
+        await BrowserManager.initialize(self.render_pages)
 
         new_urls = set()
         while self._to_visit and self._current_depth <= self.max_depth:
-            if self.has_crawl_delay:
-                # If there's a crawl delay, process URLs one at a time
-                # by popping a URL from the _to_visit set
-                response_pairs = await ResponseLoader.load_responses(self._to_visit.pop(), render_pages=self.render_pages)
-                await asyncio.sleep(self.crawl_delay)
-            else:
-                # If no crawl delay, process all URLs at once
-                response_pairs = await ResponseLoader.load_responses(*self._to_visit, render_pages=self.render_pages)
-                self._to_visit.clear()
+            # Log crawler status
+            self._logger.info(f"DEPTH {self._current_depth}")
 
-            for url in self._process_responses(response_pairs):
-                if url not in self._visited and self._is_url_allowed(url):
-                    self._visited.add(url)
-                    new_urls.add(url)
+            # populate structure with all the urls to get responses from
+            urls_to_get_responses_from = {self._to_visit.pop()} if self.has_crawl_delay else self._to_visit
+
+            response_pairs = await ResponseLoader.load_responses(
+                urls_to_get_responses_from,
+                render_pages=self.render_pages
+            )
+
+            # if there's no crawl delay that means we sent all the urls to vist to be
+            # processed, so we can clear the set
+            if not self.has_crawl_delay:
+                self._to_visit.clear()
+            else:
+                await asyncio.sleep(self.crawl_delay)
+
+            # Process responses
+            await self._process_responses(response_pairs)
+
+            new_urls.update(
+                self.collect_child_urls_from_responses(response_pairs.keys(), response_pairs.values())
+            )
+
+            if self.render_pages:
+                await self._collect_button_redirect()
 
             if not self._to_visit:
                 # Once we have processed all the URLs in _to_visit, copy over all the new URLs and increase the depth
@@ -134,20 +165,68 @@ class Crawler:
                 self._current_depth += 1
                 new_urls.clear()
 
-    def _process_responses(self, responses: Dict[str, Union[ResponseInformation, BaseException]]) -> Generator[str, Any, Any]:
+    async def _process_responses(self, response_pairs: Dict[str, ScrapedResponse]) -> None:
         """
-        Process the responses and yield extracted URLs.
+        Process the responses and update crawled data and visited URLs.
 
         Args:
-            responses (Dict[str, Union[ResponseInformation, BaseException]]): A dictionary of URLs mapped to responses or exceptions.
-
-        Yields:
-            str: Extracted URLs.
+            response_pairs (Dict[str, ScrapedResponse]): A dictionary of URL-response pairs to process.
         """
-        for url, response_info in responses.items():
+        for url, response_info in response_pairs.items():
             self._visited.add(url)
-            for new_url in self.extract_links(url, response_info.html):
-                yield new_url
+            # if there are elements that need to be clicked and at least 1 of them
+            # are unique, put href elements in the click set
+            if response_info.href_elements and await self._has_unique_locator(response_info):
+                # POTENTIAL DUPE BUG
+                self._response_with_href_elements.add(response_info)
+            # else if a page was used with the response, it can be recycled or closed
+            elif response_info.page:
+                await BrowserManager.close_page(response_info.page, feed_into_pool=True)
+
+    async def _collect_button_redirect(self) -> None:
+        """
+        Clicks on all the buttons and puts the url they lead to into the to_vist set
+        """
+
+        collected_href_locators = [element for rwh_elements in self._response_with_href_elements for element in
+                                   rwh_elements.href_elements]
+
+        self._processed_href_locators.update(collected_href_locators)
+
+        # while there is response with elements to click
+        while len(self._response_with_href_elements):
+            # get a response that has elements to click
+            scraped_response: ScrapedResponse = self._response_with_href_elements.pop()
+
+            for click_element in scraped_response.href_elements:
+                await click_element.click()
+
+                if click_element.page.url not in self._visited:
+                    self._to_visit.add(click_element.page.url)
+
+            # the page has clicked through all its elements and can now be reused
+            await BrowserManager.close_page(scraped_response.page, feed_into_pool=True)
+
+    async def _has_unique_locator(self, scraped_response: ScrapedResponse) -> bool:
+        """
+        Check if the `ScrapedResponse` contains at least one unique `Locator` in its `href_elements`.
+
+        Args:
+           scraped_response (ScrapedResponse): The `ScrapedResponse` to check for unique `Locator`.
+
+        Returns:
+           bool: True if the provided `ScrapedResponse` has at least one unique `Locator` in its `href_elements`,
+           False otherwise. Duplicate elements are removed from the `href_elements` during the check.
+        """
+        P_LOCATOR_URLS = {p_locator.page.url for p_locator in self._processed_href_locators}
+
+        unique_locators = []
+        for locator in scraped_response.href_elements:
+            if locator.page.url not in P_LOCATOR_URLS:
+                unique_locators.append(locator)
+
+        scraped_response.href_elements = unique_locators
+        return len(scraped_response.href_elements) > 0
 
     def _set_event_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         """
@@ -177,9 +256,56 @@ class Crawler:
         return f"{root_url}/robots.txt" if root_url else ""
 
     def _is_url_allowed(self, url: str) -> bool:
-        # if rule patterns are defined and the url does not match any pattern return false
-        if self.url_patterns and not any([url_pattern for url_pattern in self.url_patterns if re.search(url_pattern, url)]):
-            return False
+        """
+        Check if the given URL is allowed for scraping.
+
+        Args:
+            url (str): The URL to check.
+
+        Returns:
+            bool: True if the URL is allowed; otherwise, False.
+        """
+        if self._is_url_allowed_by_patterns(url) and self._is_url_allowed_by_domain(url):
+            return self._is_url_allowed_robot(url)
+        return False
+
+    def _is_url_allowed_by_patterns(self, url: str) -> bool:
+        """
+        Check if the URL matches any of the defined patterns.
+
+        Args:
+            url (str): The URL to check.
+
+        Returns:
+            bool: True if the URL matches a pattern or no patterns are defined; otherwise, False.
+        """
+        if not self.url_patterns:
+            return True
+
+        return any(re.search(pattern, url) for pattern in self.url_patterns)
+
+    def _is_url_allowed_by_domain(self, url: str) -> bool:
+        """
+        Check if the domain of the given URL is in the set of allowed domains.
+
+        Args:
+            url (str): The URL to check.
+
+        Returns:
+            bool: True if the domain is allowed; otherwise, False.
+        """
+        return ResponseLoader.get_domain(url) in self.allowed_domains
+
+    def _is_url_allowed_robot(self, url: str) -> bool:
+        """
+        Check if the URL is allowed according to the robots.txt rules.
+
+        Args:
+            url (str): The URL to check.
+
+        Returns:
+            bool: True if the URL is allowed by robots.txt, or we ignore the file; otherwise, False.
+        """
         if self.ignore_robots_txt:
             return True
         return self._robot_parser.can_fetch(self.user_agent, url)

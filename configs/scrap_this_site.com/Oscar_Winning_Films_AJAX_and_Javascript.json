@@ -9,7 +9,7 @@
       "crawler": {
         "ignore_robots_txt": true,
         "crawl_delay": 0.01,
-        "max_depth": 0,
+        "max_depth": 1,
         "allowed_domains": ["www.scrapethissite.com"]
       }
     }
@@ -35,7 +35,7 @@
   "data_saving": {
     "csv": {
       "enabled": true,
-      "file_path": "Oscar Winning Films.csv",
+      "file_path": "scraper_out_put/Oscar Winning Films.csv",
       "orientation": "vertical"
     }
   },

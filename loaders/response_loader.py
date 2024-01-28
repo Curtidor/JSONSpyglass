@@ -1,42 +1,72 @@
-import re
 import aiohttp
 import asyncio
+import logging
 
-from dataclasses import dataclass
-from typing import Coroutine, Dict, AsyncGenerator, List, Set, Tuple
-
-import playwright.async_api
+from enum import Enum
+from typing import Coroutine, Dict, AsyncGenerator, List, Set, Tuple, Generator, Any
 from aiohttp import ClientTimeout
-from urllib.parse import urlsplit, urlunsplit, urljoin
-from playwright.async_api import async_playwright, Browser
+from urllib.parse import urlsplit, urlunsplit, urljoin, urlparse
+from playwright.async_api import Page, Request, Locator
+from selectolax.parser import HTMLParser
+from EVNTDispatch import EventDispatcher, PEvent, EventType
 
-from events.event_dispatcher import EventDispatcher, Event
-from utils.logger import LoggerLevel, Logger
+from scraping.page_manager import BrowserManager
+from utils.clogger import CLogger
 
 
-@dataclass
-class ResponseInformation:
-    html: str
-    status_code: int
+class ScrapedResponse:
+    def __init__(self, html: str, status_code: int, url: str, href_elements: List[Locator] = None,
+                 page: Page = None):
+        self.html: str = html
+        self.status_code: int = status_code
+        self.url: str = url
+        self.href_elements: List[Locator] = href_elements
+        self.page: Page = page
+
+    def __eq__(self, other):
+        if isinstance(other, ScrapedResponse):
+            return (
+                    self.html == other.html and
+                    self.status_code == other.status_code and
+                    self.url == other.url and
+                    self.href_elements == other.href_elements
+            )
+        return False
+
+    def __hash__(self):
+        return hash((self.html, self.status_code, self.url))
+
+
+# this if for a future feature where we can try to get different states of a page event
+# when previous ones failed
+class RenderStateRetry(Enum):
+    INITIAL = 0,
+    LOAD_STATE_TIMEOUT = 1,
+    REQUEST_FINISHED_EVENT_TIMEOUT = 2
 
 
 class ResponseLoader:
     """
     A utility class for loading and processing web responses.
     """
+    _BAD_RESPONSE_CODE = -1
 
     _max_responses = 60
     _max_renders = 5
     _event_dispatcher: EventDispatcher = None
 
-    _response_lock = asyncio.Semaphore(_max_responses)
-    _render_lock = asyncio.Semaphore(_max_renders)
+    _response_semaphore = asyncio.Semaphore(_max_responses)
+    _render_semaphore = asyncio.Semaphore(_max_renders)
 
-    _browser: Browser = None
+    _hrefs_values_to_click = {'#', 'javascript:void(0);', 'javascript:;'}
 
-    @staticmethod
-    def setup(event_dispatcher: EventDispatcher) -> None:
-        ResponseLoader._event_dispatcher = event_dispatcher
+    _is_initialized: bool = False
+
+    _logger = CLogger("ResponseLoader", logging.INFO, {logging.StreamHandler(): logging.INFO})
+
+    @classmethod
+    def setup(cls, event_dispatcher: EventDispatcher) -> None:
+        cls._event_dispatcher = event_dispatcher
 
     @staticmethod
     def normalize_url(url: str) -> str:
@@ -61,31 +91,77 @@ class ResponseLoader:
         return normalized_url
 
     @classmethod
-    async def get_rendered_response(cls, url: str, timeout_time: float = 30) -> ResponseInformation:
+    async def wait_for_page_load(cls, page: Page, timeout_time: float = 30) -> None:
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(
+                    # ERROR: the load event is creating time out errors
+                    page.wait_for_load_state("load", timeout=timeout_time),
+                    page.wait_for_load_state("networkidle", timeout=timeout_time),
+                ),
+                timeout=timeout_time / 1000  # Convert back to seconds
+            )
+        except asyncio.TimeoutError as te:
+            cls._logger.error(
+                f"TIME OUT ERROR WHEN WAITING FOR [load state]: {te}\n URL: {page.url}",
+            )
+
+    @classmethod
+    async def get_rendered_response(cls, url: str, timeout_time: float = 30) -> ScrapedResponse:
         """
         Get the rendered HTML response content of a web page.
 
         Args:
-            url (str): The URL of the web page.
-            timeout_time (float) Maximum operation time in seconds, defaults to 30 seconds
+          url (str): The URL of the web page.
+          timeout_time (float): Maximum operation time in seconds (default is 30 seconds).
 
         Returns:
-            str: The rendered HTML content.
+          ScrapedResponse: A response object containing the rendered HTML content and additional information.
+
+        Note:
+          If href elements are returned, the page is not closed, and the caller is responsible for managing
+          the page's lifetime.
         """
-        browser = await cls._get_browser()
         timeout_time *= 1000
 
-        async with cls._render_lock:
-            page = await browser.new_page()
+        async with cls._render_semaphore:
+            page = await BrowserManager.get_page()
+
             response = await page.goto(url, timeout=timeout_time)
-            html = await response.text()
-            await page.close()
-            Logger.console_log(f"Responses Received: URL={url}, Status={response.status}", LoggerLevel.INFO,
-                               include_time=True)
-            return ResponseInformation(html, response.status)
+            content_future = asyncio.Future()
+
+            async def request_finished_callback(request: Request) -> None:
+                content = await request.frame.content()
+                if not content_future.done():
+                    content_future.set_result(content)
+
+            page.on("requestfinished", request_finished_callback)
+
+            await cls.wait_for_page_load(page, timeout_time)
+
+            html = ""
+            try:
+                # Wait for the content_future with a timeout
+                html = await asyncio.wait_for(content_future, timeout=timeout_time / 1000)
+            except asyncio.TimeoutError as te:
+                cls._logger.error(
+                    f"TIME OUT ERROR WHEN WAITING FOR [request finished] event: {te}\n (T-O-E) URL: {url}"
+                )
+            finally:
+                page.remove_listener("requestfinished", request_finished_callback)
+
+            hrefs_elements = await cls.collect_hrefs_with_elements(page)
+
+            # fallback when we couldn't render the page and extract the html
+            if not html:
+                cls._logger.warning("Failed to fetch html, falling back to safety fetch")
+                html = await page.content()
+
+            status_code = response.status if response else cls._BAD_RESPONSE_CODE
+            return ScrapedResponse(html, status_code, href_elements=hrefs_elements, page=page, url=url)
 
     @classmethod
-    async def get_response(cls, url: str, timeout_time: float = 30) -> ResponseInformation:
+    async def get_response(cls, url: str, timeout_time: float = 30) -> ScrapedResponse:
         """
         Get the text response content of a web page.
 
@@ -96,35 +172,54 @@ class ResponseLoader:
         Returns:
             str: The text response content.
         """
-        async with cls._response_lock:
+        async with cls._response_semaphore:
             timeout = ClientTimeout(total=timeout_time)
+
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url) as response:
                     html = await response.text()
-                    Logger.console_log(f"Responses Received: URL={url}, Status={response.status}", LoggerLevel.INFO,
-                                       include_time=True)
-                    return ResponseInformation(html, response.status)
+                    return ScrapedResponse(html, response.status, url=url)
 
-    @staticmethod
-    async def load_responses(*urls, render_pages: bool = False) -> Dict[str, ResponseInformation]:
-        urls = set(urls)
+    @classmethod
+    async def load_responses(cls, urls: Set[str], render_pages: bool = False) -> Dict[str, ScrapedResponse]:
+        """
+        Load and retrieve responses from the specified URLs.
 
-        response_method = ResponseLoader.get_rendered_response if render_pages \
-            else ResponseLoader.get_response
+        Args:
+            *urls: Variable-length arguments representing the URLs to load responses from.
+            render_pages (bool): Whether to render pages with JavaScript (default is False).
 
-        html_responses = []
-        results = {}
+        Returns:
+            Dict[str, ScrapedResponse]: A dictionary containing the loaded responses indexed by URL.
+
+        Note:
+            This method loads responses from the provided URLs. If rendering pages is enabled, it will render pages
+            with JavaScript. The method triggers a "new_responses" event with the loaded response data.
+        """
+
+        response_method = cls.get_rendered_response if render_pages \
+            else cls.get_response
         tasks = [response_method(url) for url in urls]
-        async for result in ResponseLoader._generate_responses(tasks, urls):
-            url, html = result
-            html_responses.append({url: html.html})
-            results.update({url: html})
 
-        ResponseLoader._event_dispatcher.trigger(Event("new_responses", "NEW_DATA", data=html_responses))
+        results = {}
+        html_responses = []
+        async for result in cls._generate_responses(tasks, urls):
+            url, scraped_response = result
+
+            cls._log_response(scraped_response)
+
+            if scraped_response.status_code == cls._BAD_RESPONSE_CODE:
+                cls._logger.warning(f"Bad response: {url}")
+                continue
+
+            html_responses.append({url: scraped_response.html})
+            results.update({url: scraped_response})
+
+        ResponseLoader._event_dispatcher.sync_trigger(PEvent("new_responses", EventType.Base, data=html_responses))
         return results
 
-    @staticmethod
-    def build_link(base_url: str, href: str) -> str:
+    @classmethod
+    def build_link(cls, base_url: str, href: str) -> str:
         """
         Build a full URL from a base URL and a relative href.
 
@@ -138,17 +233,48 @@ class ResponseLoader:
         if not href:
             return ""
 
-        return ResponseLoader.normalize_url(urljoin(base_url, href))
+        url = urljoin(base_url, href)
+        return cls.normalize_url(url)
 
     @staticmethod
     def get_domain(url: str) -> str:
-        # if a bad url is give and no match if found an error is thrown
-        match = re.search(r'https?://([^/]+)', url)
-        return match.group(0)
+        return urlparse(url).netloc
 
-    @staticmethod
-    async def _generate_responses(tasks: List[Coroutine[None, None, ResponseInformation]], urls: Set[str]) -> \
-            AsyncGenerator[Tuple[str, ResponseInformation], None]:
+    @classmethod
+    async def collect_hrefs_with_elements(cls, page: Page) -> List[Locator]:
+        """
+        Collects and returns a list of Locator elements representing anchor tags (href) with specific values on a web page.
+
+        Args:
+            page (Page): The Playwright Page object to search for anchor tags.
+
+        Returns:
+            List[Locator]: A list of Locator elements representing anchor tags with specific href attribute values.
+
+        """
+        href_elements_locator = page.locator('a[href]')
+
+        hrefs_to_click = []
+        for href_element in await href_elements_locator.all():
+            href = await href_element.get_attribute('href')
+
+            if href in cls._hrefs_values_to_click:
+                hrefs_to_click.append(href_element)
+
+        return hrefs_to_click
+
+    @classmethod
+    def get_hrefs_from_html(cls, html: str) -> Generator[str, Any, Any]:
+        parser = HTMLParser(html)
+        for a_tag in parser.css("a"):
+            href = a_tag.attributes.get("href")
+            if href in cls._hrefs_values_to_click:
+                continue
+            yield href
+
+    @classmethod
+    async def _generate_responses(cls, tasks: List[Coroutine[None, None, ScrapedResponse]], urls: Set[str]) -> \
+            AsyncGenerator[Tuple[str, ScrapedResponse], None]:
         """
         Generate responses form a list of tasks and URLs.
 
@@ -163,18 +289,15 @@ class ResponseLoader:
 
         for url, response_info in zip(urls, responses):
             if isinstance(response_info, Exception):
-                Logger.console_log(f"Responses Error: {response_info}", LoggerLevel.ERROR)
+                cls._logger.error(f"Responses Error: {response_info}")
                 continue
             yield url, response_info
 
     @classmethod
-    async def _get_browser(cls):
-        if cls._browser is None:
-            p = await async_playwright().start()
-            cls._browser = await p.chromium.launch()
-        return cls._browser
+    def _log_response(cls, response: ScrapedResponse) -> None:
+        message = f"URL={response.url}, Status={response.status_code}"
 
-    @staticmethod
-    async def close():
-        if ResponseLoader._browser:
-            await ResponseLoader._browser.close()
+        if response.status_code == cls._BAD_RESPONSE_CODE:
+            cls._logger.warning(f"Bad Response Received: {message}")
+        else:
+            cls._logger.info(f"Good Response Received: {message}")

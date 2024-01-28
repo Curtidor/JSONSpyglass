@@ -1,23 +1,25 @@
 import re
+import logging
 
 from typing import Generator, Tuple, List
-from bs4 import PageElement
+from selectolax.parser import Node
 
-from events.event_dispatcher import EventDispatcher, Event
+from EVNTDispatch import EventDispatcher, PEvent
 from loaders.config_loader import ConfigLoader
 from models.scarped_data import ScrapedData
 from scraping.data_saver import DataSaver
-from utils.logger import Logger, LoggerLevel
+from utils.clogger import CLogger
 
 
 class DataParser:
     def __init__(self, config: ConfigLoader, event_dispatcher: EventDispatcher, data_saver: DataSaver):
         self.config = config
         self.data_saver = data_saver
+        self._logger = CLogger("DataParser", logging.INFO, {logging.StreamHandler(): logging.INFO})
 
         event_dispatcher.add_listener("scraped_data", self.parse_data)
 
-    def parse_data(self, event: Event) -> None:
+    async def parse_data(self, event: PEvent) -> None:
         url_element_pairs = event.data
         if not url_element_pairs:
             return
@@ -27,19 +29,20 @@ class DataParser:
         for scraped_data, element_id in self.get_elements(url_element_pairs):
             parsing_data = self.config.get_data_parsing_options(element_id)
 
-            for element in scraped_data.get_elements():
+            for node in scraped_data.get_nodes():
                 if parsing_data.get("collect_text"):
-                    cleaned_data.append(self.collect_text(element))
+                    text = self.collect_text(node)
+                    cleaned_data.append(text)
                 elif parsing_data.get("remove_tags"):
-                    cleaned_data.append(self.remove_tags(element))
+                    cleaned_data.append(self.remove_tags(node))
 
                 attr_data = parsing_data.get("collect_attr_value")
                 if attr_data and attr_data.get('attr_name'):
-                    cleaned_data.append(self.collect_attribute_value(str(element.unwrap()), attr_data['attr_name']))
+                    cleaned_data.append(self.collect_attribute_value(str(node.unwrap()), attr_data['attr_name']))
                 elif attr_data and not attr_data.get('attr_name'):
                     self.log_missing_attribute_name(attr_data)
 
-        self.data_saver.save(cleaned_data)
+        await self.data_saver.save(cleaned_data)
 
     @staticmethod
     def get_elements(scraped_data_list: List[ScrapedData]) -> Generator[Tuple[ScrapedData, int], None, None]:
@@ -54,17 +57,16 @@ class DataParser:
         return ""
 
     @staticmethod
-    def collect_text(element: PageElement) -> str:
-        return element.text.strip()
+    def collect_text(node: Node) -> str:
+        return node.text().strip()
 
     @staticmethod
-    def remove_tags(element: PageElement) -> str:
-        return str(element.unwrap())
+    def remove_tags(node: Node) -> str:
+        return str(node.unwrap())
 
-    @staticmethod
-    def log_missing_attribute_name(attr_data: dict) -> None:
+    def log_missing_attribute_name(self, attr_data: dict) -> None:
         error_message = (
             f'No attribute name found for collecting attribute value, '
             f'missing {{"attr_name": "attr_value"}}: FOUND => {attr_data}'
         )
-        Logger.console_log(error_message, LoggerLevel.ERROR)
+        self._logger.error(error_message)
