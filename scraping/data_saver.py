@@ -1,9 +1,10 @@
 import aiofiles
+import logging
 
 from asyncio import Lock
 from typing import Dict, Any, List
 
-from utils.logger import Logger, LoggerLevel
+from utils.clogger import CLogger
 
 # TODO: (BUG) when the crawler has no sleep the data saves in the wrong order
 
@@ -37,20 +38,18 @@ class DataSaver:
             'csv': self.clear_csv
         }
 
+        self._logger = CLogger("DataSaver", logging.INFO, {logging.StreamHandler(): logging.INFO})
+
     async def setup(self, clear: bool = False) -> None:
         if clear:
-            for save_type in self.save_types:
-                clear_func = self._clear_func_mapping.get(save_type)
-                if not clear_func:
-                    Logger.console_log(f"Unknown clear type: {save_type}", LoggerLevel.ERROR)
-                    continue
-                clear_func(self.save_config.get(save_type))
+            # clear all the files that where specified in the config file
+            self._clear_file()
 
         for save_type in self.save_types:
             save_func = self._save_func_mapping.get(save_type)
 
             if not save_func:
-                Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.ERROR)
+                self._logger.warning(f"Unknown save type: {save_type}")
                 continue
 
             await save_func(self.save_config.get(save_type), self.data_keys, len(self.data_keys), self._lock)
@@ -65,7 +64,7 @@ class DataSaver:
             save_func = self._save_func_mapping.get(save_type)
 
             if not save_func:
-                Logger.console_log(f"Unknown save type: {save_type}", LoggerLevel.WARNING)
+                self._logger.warning(f"Unknown save type: {save_type}")
                 continue
 
             await save_func(self.save_config.get(save_type), data, len(self.data_keys), self._lock)
@@ -136,6 +135,14 @@ class DataSaver:
         """
         raise NotImplementedError("This feature will be added soon!")
 
+    def _clear_file(self):
+        for save_type in self.save_types:
+            clear_func = self._clear_func_mapping.get(save_type)
+            if not clear_func:
+                self._logger.warning(f"Unknown clear type: {save_type}")
+                continue
+            clear_func(self.save_config.get(save_type))
+
     def _initialize_save_types(self):
         """
         Initialize save types based on the save configurations
@@ -145,3 +152,4 @@ class DataSaver:
 
         for save_type in self.save_config:
             self.save_types.append(save_type)
+

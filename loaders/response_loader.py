@@ -1,5 +1,6 @@
 import aiohttp
 import asyncio
+import logging
 
 from enum import Enum
 from typing import Coroutine, Dict, AsyncGenerator, List, Set, Tuple, Generator, Any
@@ -7,10 +8,10 @@ from aiohttp import ClientTimeout
 from urllib.parse import urlsplit, urlunsplit, urljoin, urlparse
 from playwright.async_api import Page, Request, Locator
 from selectolax.parser import HTMLParser
+from EVNTDispatch import EventDispatcher, PEvent, EventType
 
-from events.event_dispatcher import EventDispatcher, Event
 from scraping.page_manager import BrowserManager
-from utils.logger import LoggerLevel, Logger
+from utils.clogger import CLogger
 
 
 class ScrapedResponse:
@@ -61,6 +62,8 @@ class ResponseLoader:
 
     _is_initialized: bool = False
 
+    _logger = CLogger("ResponseLoader", logging.INFO, {logging.StreamHandler(): logging.INFO})
+
     @classmethod
     def setup(cls, event_dispatcher: EventDispatcher) -> None:
         cls._event_dispatcher = event_dispatcher
@@ -99,11 +102,8 @@ class ResponseLoader:
                 timeout=timeout_time / 1000  # Convert back to seconds
             )
         except asyncio.TimeoutError as te:
-            Logger.console_log(
-                f"TIME OUT ERROR WHEN WAITING FOR [load state]: {te}\n"
-                f"URL: {page.url}",
-                LoggerLevel.WARNING,
-                include_time=True
+            cls._logger.error(
+                f"TIME OUT ERROR WHEN WAITING FOR [load state]: {te}\n URL: {page.url}",
             )
 
     @classmethod
@@ -144,23 +144,17 @@ class ResponseLoader:
                 # Wait for the content_future with a timeout
                 html = await asyncio.wait_for(content_future, timeout=timeout_time / 1000)
             except asyncio.TimeoutError as te:
-                Logger.console_log(
-                    f"TIME OUT ERROR WHEN WAITING FOR [request finished] event: {te}\n"
-                    f"URL: {url}",
-                    LoggerLevel.WARNING,
-                    include_time=True
+                cls._logger.error(
+                    f"TIME OUT ERROR WHEN WAITING FOR [request finished] event: {te}\n (T-O-E) URL: {url}"
                 )
             finally:
                 page.remove_listener("requestfinished", request_finished_callback)
 
             hrefs_elements = await cls.collect_hrefs_with_elements(page)
 
-            # if the page has no element dependencies we can close it
-            if not hrefs_elements:
-                await BrowserManager.close_page(page, feed_into_pool=True)
-
             # fallback when we couldn't render the page and extract the html
             if not html:
+                cls._logger.warning("Failed to fetch html, falling back to safety fetch")
                 html = await page.content()
 
             status_code = response.status if response else cls._BAD_RESPONSE_CODE
@@ -215,13 +209,13 @@ class ResponseLoader:
             cls._log_response(scraped_response)
 
             if scraped_response.status_code == cls._BAD_RESPONSE_CODE:
-                Logger.console_log(f"Bad response: {url}", LoggerLevel.WARNING)
+                cls._logger.warning(f"Bad response: {url}")
                 continue
 
             html_responses.append({url: scraped_response.html})
             results.update({url: scraped_response})
 
-        ResponseLoader._event_dispatcher.trigger(Event("new_responses", "NEW_DATA", data=html_responses))
+        ResponseLoader._event_dispatcher.sync_trigger(PEvent("new_responses", EventType.Base, data=html_responses))
         return results
 
     @classmethod
@@ -278,8 +272,8 @@ class ResponseLoader:
                 continue
             yield href
 
-    @staticmethod
-    async def _generate_responses(tasks: List[Coroutine[None, None, ScrapedResponse]], urls: Set[str]) -> \
+    @classmethod
+    async def _generate_responses(cls, tasks: List[Coroutine[None, None, ScrapedResponse]], urls: Set[str]) -> \
             AsyncGenerator[Tuple[str, ScrapedResponse], None]:
         """
         Generate responses form a list of tasks and URLs.
@@ -295,21 +289,15 @@ class ResponseLoader:
 
         for url, response_info in zip(urls, responses):
             if isinstance(response_info, Exception):
-                Logger.console_log(f"Responses Error: {response_info}", LoggerLevel.ERROR)
+                cls._logger.error(f"Responses Error: {response_info}")
                 continue
             yield url, response_info
 
     @classmethod
     def _log_response(cls, response: ScrapedResponse) -> None:
-        log_message = "!!Bad Response Received!!"
-        warning_level = LoggerLevel.WARNING
+        message = f"URL={response.url}, Status={response.status_code}"
 
-        if response.status_code != cls._BAD_RESPONSE_CODE:
-            log_message = "Response Received"
-            warning_level = LoggerLevel.INFO
-
-        Logger.console_log(
-            f"{log_message}: URL={response.url}, Status={response.status_code}",
-            warning_level,
-            include_time=True
-        )
+        if response.status_code == cls._BAD_RESPONSE_CODE:
+            cls._logger.warning(f"Bad Response Received: {message}")
+        else:
+            cls._logger.info(f"Good Response Received: {message}")

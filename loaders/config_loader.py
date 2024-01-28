@@ -1,10 +1,11 @@
 import json
+import logging
 
 from typing import Dict, List, Any, Tuple, Generator
 
 from loaders.response_loader import ResponseLoader
 from scraping.crawler import Crawler
-from utils.logger import Logger, LoggerLevel
+from utils.clogger import CLogger
 from utils.deserializer import Deserializer
 
 
@@ -37,6 +38,8 @@ class ConfigLoader:
 
         self._build_target_url_table()
         self.format_config()
+
+        self._logger = CLogger("ConfigLoafer", logging.INFO, {logging.StreamHandler(): logging.INFO})
 
     def load_config(self) -> dict:
         """
@@ -155,10 +158,7 @@ class ConfigLoader:
 
             element_parsing_data = element.get('data_parsing', '')
             if not element_parsing_data:
-                Logger.console_log(
-                    f"element has no data parsing options specified, collect data will be ignored: {element}",
-                    LoggerLevel.WARNING
-                )
+                self._logger.info(f"element has no data parsing options specified, collect data will be ignored: {element}")
             else:
                 self._parsing_options_cache.update({element_id: element_parsing_data})
 
@@ -220,8 +220,7 @@ class ConfigLoader:
             options = url_data.get('options', {})
             self._target_url_table.update({url: self._build_options(url, options)})
 
-    @staticmethod
-    def _build_options(url: str, options: Dict) -> Dict[str, bool]:
+    def _build_options(self, url: str, options: Dict) -> Dict[str, bool]:
         """
         Build options for a target URL with default values.
 
@@ -235,8 +234,8 @@ class ConfigLoader:
         DEFAULT_OPTIONS = {'only_scrape_sub_pages': True, 'render_pages': False}
         for option in DEFAULT_OPTIONS:
             if options.get(option) is None:
-                Logger.console_log(
-                    f"missing options argument in target url: {url} missing option: {option}, defaulting to {DEFAULT_OPTIONS[option]}",
-                    LoggerLevel.WARNING)
+                self._logger.warning(
+                    f"missing options argument in target url: {url} missing option: {option}, defaulting to {DEFAULT_OPTIONS[option]}"
+                )
                 options.update({option: DEFAULT_OPTIONS[option]})
         return options

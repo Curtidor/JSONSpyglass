@@ -1,6 +1,7 @@
 import asyncio
 
-from events.event_dispatcher import EventDispatcher
+from EVNTDispatch import EventDispatcher
+
 from factories.config_element_factory import ConfigElementFactory
 from scraping.data_parser import DataParser
 from scraping.data_saver import DataSaver
@@ -38,6 +39,7 @@ async def load_and_scrape_data(config_path: str) -> None:
         crawler.start()
         await crawler.exit()
 
+    await event_dispatcher.close()
 
 def main():
     print("STARTING...")

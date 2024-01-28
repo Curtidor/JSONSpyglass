@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 
 from typing import List, Any, Generator, Iterable, Set, Dict
@@ -7,7 +8,7 @@ from urllib.robotparser import RobotFileParser
 from playwright.async_api import Locator
 
 from loaders.response_loader import ResponseLoader, ScrapedResponse
-from utils.logger import LoggerLevel, Logger
+from utils.clogger import CLogger
 from .page_manager import BrowserManager
 
 # TODO (SPEED AND EFFICIENCY IMPROVEMENT) Need work on page management pages are closed to soon
@@ -64,6 +65,8 @@ class Crawler:
 
         # set event loop
         self._set_event_loop(loop=loop)
+
+        self._logger = CLogger("Crawler", logging.INFO, {logging.StreamHandler(): logging.INFO})
 
     @property
     def has_crawl_delay(self) -> bool:
@@ -129,7 +132,7 @@ class Crawler:
         new_urls = set()
         while self._to_visit and self._current_depth <= self.max_depth:
             # Log crawler status
-            Logger.console_log(f"DEPTH {self._current_depth}", LoggerLevel.INFO)
+            self._logger.info(f"DEPTH {self._current_depth}")
 
             # populate structure with all the urls to get responses from
             urls_to_get_responses_from = {self._to_visit.pop()} if self.has_crawl_delay else self._to_visit

@@ -1,7 +1,7 @@
 from typing import List, Dict
 from selectolax.parser import HTMLParser
 
-from events.event_dispatcher import EventDispatcher, Event
+from EVNTDispatch import EventDispatcher, PEvent, EventType
 from loaders.config_loader import ConfigLoader
 from models.scarped_data import ScrapedData
 from models.target_element import TargetElement
@@ -26,7 +26,7 @@ class DataScraper:
         self.event_dispatcher = event_dispatcher
         self.event_dispatcher.add_listener("new_responses", self.collect_data)
 
-    def collect_data(self, event: Event) -> None:
+    def collect_data(self, event: PEvent) -> None:
         """
         (OUT DATED DOC)
         Collect data from the responses obtained by the response loader.
@@ -41,7 +41,7 @@ class DataScraper:
             scraped_data = self._process_response(response)
             all_scraped_data.extend(scraped_data)
 
-        self.event_dispatcher.async_trigger_nw(Event("scraped_data", "data", data=all_scraped_data))
+        self.event_dispatcher.async_trigger_nw(PEvent("scraped_data", EventType.Base, data=all_scraped_data))
 
     def _process_response(self, response: Dict[str, str]) -> List[ScrapedData]:
         results = []
