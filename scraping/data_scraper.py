@@ -34,26 +34,27 @@ class DataScraper:
         Args:
             event (Event): The event triggered with the responses' data.
         """
-        responses = event.data
+        responses: Dict[str, str] = event.data
+        for url in responses:
+            scraped_data = self._process_response(url, responses[url])
 
-        all_scraped_data = []
-        for response in responses:
-            scraped_data = self._process_response(response)
-            all_scraped_data.extend(scraped_data)
-
-        self.event_dispatcher.async_trigger_nw(PEvent("scraped_data", EventType.Base, data=all_scraped_data))
-
-    def _process_response(self, response: Dict[str, str]) -> List[ScrapedData]:
-        results = []
-
-        for url, content in response.items():
-            parser = HTMLParser(content)
-
-            if self.config.only_scrape_sub_pages(url):
+            if not scraped_data:
                 continue
 
-            for element in self.elements:
-                scraped_data = self.collect_all_target_elements(url, element, parser)
+            self.event_dispatcher.async_trigger_nw(PEvent("scraped_data", EventType.Base, data=scraped_data))
+
+    def _process_response(self, url: str, content: str) -> List[ScrapedData]:
+        results = []
+
+        parser = HTMLParser(content)
+
+        if self.config.only_scrape_sub_pages(url):
+            return results
+
+        for element in self.elements:
+            scraped_data = self.collect_all_target_elements(url, element, parser)
+
+            if scraped_data.nodes:
                 results.append(scraped_data)
 
         return results
