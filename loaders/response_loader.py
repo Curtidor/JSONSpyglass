@@ -199,23 +199,24 @@ class ResponseLoader:
 
         response_method = cls.get_rendered_response if render_pages \
             else cls.get_response
+
         tasks = [response_method(url) for url in urls]
 
         results = {}
-        html_responses = []
+        event_data = {}
         async for result in cls._generate_responses(tasks, urls):
             url, scraped_response = result
 
             cls._log_response(scraped_response)
 
             if scraped_response.status_code == cls._BAD_RESPONSE_CODE:
-                cls._logger.warning(f"Bad response: {url}")
                 continue
 
-            html_responses.append({url: scraped_response.html})
             results.update({url: scraped_response})
+            event_data.update({url: scraped_response.html})
 
-        ResponseLoader._event_dispatcher.sync_trigger(PEvent("new_responses", EventType.Base, data=html_responses))
+        cls._event_dispatcher.sync_trigger(PEvent("new_responses", EventType.Base, data=event_data))
+
         return results
 
     @classmethod
