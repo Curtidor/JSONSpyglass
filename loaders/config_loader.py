@@ -39,6 +39,7 @@ class ConfigLoader:
         self._build_target_url_table()
         self.format_config()
 
+
         self._logger = CLogger("ConfigLoafer", logging.INFO, {logging.StreamHandler(): logging.INFO})
 
     def load_config(self) -> dict:
