@@ -4,7 +4,6 @@ import re
 
 from typing import List, Any, Generator, Iterable, Set, Dict
 from urllib.robotparser import RobotFileParser
-
 from playwright.async_api import Locator
 
 from loaders.response_loader import ResponseLoader, ScrapedResponse
@@ -131,7 +130,6 @@ class Crawler:
 
         new_urls = set()
         while self._to_visit and self._current_depth <= self.max_depth:
-            # Log crawler status
             self._logger.info(f"DEPTH {self._current_depth}")
 
             # populate structure with all the urls to get responses from
