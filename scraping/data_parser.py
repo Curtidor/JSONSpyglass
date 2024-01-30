@@ -3,8 +3,8 @@ import logging
 
 from typing import Generator, Tuple, List
 from selectolax.parser import Node
-
 from EVNTDispatch import EventDispatcher, PEvent
+
 from loaders.config_loader import ConfigLoader
 from models.scarped_data import ScrapedData
 from scraping.data_saver import DataSaver
@@ -25,7 +25,6 @@ class DataParser:
             return
 
         cleaned_data = []
-
         for scraped_data, element_id in self.get_elements(url_element_pairs):
             parsing_data = self.config.get_data_parsing_options(element_id)
 
