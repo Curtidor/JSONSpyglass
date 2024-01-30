@@ -41,6 +41,7 @@ async def load_and_scrape_data(config_path: str) -> None:
 
     await event_dispatcher.close()
 
+
 def main():
     print("STARTING...")
 
