@@ -197,9 +197,14 @@ class ResponseLoader:
             with JavaScript. The method triggers a "new_responses" event with the loaded response data.
         """
 
+        # the response method to use based on if we are rending the page or not
         response_method = cls.get_rendered_response if render_pages \
             else cls.get_response
 
+        # noinspection PyTypeChecker
+        # The error indicates that the URL is considered of the wrong type for the response_method parameter,
+        # but this is not accurate. The URL is of type string, which has been confirmed through testing.
+        # This type error is likely a bug, and for now, it can be safely ignored.
         tasks = [response_method(url) for url in urls]
 
         results = {}
