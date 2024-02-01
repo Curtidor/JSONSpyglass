@@ -31,11 +31,14 @@ async def load_and_scrape_data(config_path: str) -> None:
     DataScraper(config, elements, event_dispatcher)
     DataParser(config, event_dispatcher, data_saver)
 
+    crawlers = [crawler for crawler in config.get_crawlers()]
+    use_proxies = any([crawler for crawler in crawlers if crawler.use_proxies])
+
     # Set up the ResponseLoader
-    ResponseLoader.setup(event_dispatcher=event_dispatcher)
+    await ResponseLoader.setup(event_dispatcher=event_dispatcher, use_proxies=use_proxies)
 
     # Start and wait for crawlers to finish
-    for crawler in config.get_crawlers():
+    for crawler in crawlers:
         crawler.start()
         await crawler.exit()
 

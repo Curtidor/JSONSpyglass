@@ -1,15 +1,15 @@
-import aiohttp
 import asyncio
 import logging
+import httpx
 
 from enum import Enum
 from typing import Coroutine, Dict, AsyncGenerator, List, Set, Tuple, Generator, Any
-from aiohttp import ClientTimeout
 from urllib.parse import urlsplit, urlunsplit, urljoin, urlparse
 from playwright.async_api import Page, Request, Locator
 from selectolax.parser import HTMLParser
 from EVNTDispatch import EventDispatcher, PEvent, EventType
 
+from scraping.proxy_manager import ProxyManager
 from scraping.page_manager import BrowserManager
 from utils.clogger import CLogger
 
@@ -49,8 +49,6 @@ class ResponseLoader:
     """
     A utility class for loading and processing web responses.
     """
-    _BAD_RESPONSE_CODE = -1
-
     _max_responses = 60
     _max_renders = 5
     _event_dispatcher: EventDispatcher = None
@@ -62,11 +60,15 @@ class ResponseLoader:
 
     _is_initialized: bool = False
 
+    _proxy_manager = ProxyManager()
     _logger = CLogger("ResponseLoader", logging.INFO, {logging.StreamHandler(): logging.INFO})
 
     @classmethod
-    def setup(cls, event_dispatcher: EventDispatcher) -> None:
+    async def setup(cls, event_dispatcher: EventDispatcher, use_proxies: bool = False, max_proxies: int = 30) -> None:
         cls._event_dispatcher = event_dispatcher
+
+        if use_proxies:
+            await cls._proxy_manager.load_proxies(max_proxies)
 
     @staticmethod
     def normalize_url(url: str) -> str:
@@ -107,13 +109,16 @@ class ResponseLoader:
             )
 
     @classmethod
-    async def get_rendered_response(cls, url: str, timeout_time: float = 30) -> ScrapedResponse:
+    async def get_rendered_response(cls, url: str, timeout_time: float = 30,
+                                    use_proxies: bool = False) -> ScrapedResponse:
         """
         Get the rendered HTML response content of a web page.
 
         Args:
-          url (str): The URL of the web page.
-          timeout_time (float): Maximum operation time in seconds (default is 30 seconds).
+        :param url: The URL of the web page.
+        :param timeout_time: Maximum operation time in seconds (default is 30 seconds).
+        :param use_proxies: Should the request be made using a proxies
+
 
         Returns:
           ScrapedResponse: A response object containing the rendered HTML content and additional information.
@@ -122,6 +127,9 @@ class ResponseLoader:
           If href elements are returned, the page is not closed, and the caller is responsible for managing
           the page's lifetime.
         """
+        if use_proxies:
+            raise NotImplementedError('proxies are not supported when making render request')
+
         timeout_time *= 1000
 
         async with cls._render_semaphore:
@@ -157,37 +165,51 @@ class ResponseLoader:
                 cls._logger.warning("Failed to fetch html, falling back to safety fetch")
                 html = await page.content()
 
-            status_code = response.status if response else cls._BAD_RESPONSE_CODE
+            status_code = response.status if response else 400
             return ScrapedResponse(html, status_code, href_elements=hrefs_elements, page=page, url=url)
 
     @classmethod
-    async def get_response(cls, url: str, timeout_time: float = 30) -> ScrapedResponse:
+    async def get_response(cls, url: str, timeout_time: float = 30, use_proxies: bool = False) -> ScrapedResponse:
         """
         Get the text response content of a web page.
 
         Args:
-            url (str): The URL of the web page.
-            timeout_time (float) Maximum operation time in seconds, defaults to 30 seconds
+        :param url: The URL of the web page.
+        :param timeout_time: Maximum operation time in seconds (default is 30 seconds).
+        :param use_proxies: Should the request be made using a proxies
 
         Returns:
             str: The text response content.
         """
         async with cls._response_semaphore:
-            timeout = ClientTimeout(total=timeout_time)
+            if not use_proxies:
+                async with httpx.AsyncClient(timeout=timeout_time) as client:
+                    response = await client.get(url=url)
+                    html = response.text
 
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as response:
-                    html = await response.text()
-                    return ScrapedResponse(html, response.status, url=url)
+                    return ScrapedResponse(html, response.status_code, url=url)
+            else:
+                proxy = cls._proxy_manager.get_random_proxy()
+                formatted_proxy = f'{proxy.protocol}://{proxy.ip}:{proxy.port}'
+
+                url = url.replace('https', 'http', 1) if url.startswith('https') else url
+
+                async with httpx.AsyncClient(proxies=formatted_proxy, timeout=timeout_time) as client:
+                    response = await client.get(url=url)
+                    html = response.text
+
+                    return ScrapedResponse(html, response.status_code, url=url)
 
     @classmethod
-    async def load_responses(cls, urls: Set[str], render_pages: bool = False) -> Dict[str, ScrapedResponse]:
+    async def load_responses(cls, urls: Set[str], render_pages: bool = False, use_proxies: bool = False) \
+            -> Dict[str, ScrapedResponse]:
         """
         Load and retrieve responses from the specified URLs.
 
         Args:
-            *urls: Variable-length arguments representing the URLs to load responses from.
-            render_pages (bool): Whether to render pages with JavaScript (default is False).
+            :param urls: Variable-length arguments representing the URLs to load responses from.
+            :param render_pages: Whether to render pages with JavaScript (default is False).
+            :param use_proxies: Should the request be made using a proxies
 
         Returns:
             Dict[str, ScrapedResponse]: A dictionary containing the loaded responses indexed by URL.
@@ -205,7 +227,7 @@ class ResponseLoader:
         # The error indicates that the URL is considered of the wrong type for the response_method parameter,
         # but this is not accurate. The URL is of type string, which has been confirmed through testing.
         # This type error is likely a bug, and for now, it can be safely ignored.
-        tasks = [response_method(url) for url in urls]
+        tasks = [response_method(url, use_proxies=use_proxies) for url in urls]
 
         results = {}
         event_data = {}
@@ -214,7 +236,7 @@ class ResponseLoader:
 
             cls._log_response(scraped_response)
 
-            if scraped_response.status_code == cls._BAD_RESPONSE_CODE:
+            if scraped_response.status_code != 200:
                 continue
 
             results.update({url: scraped_response})
@@ -295,7 +317,7 @@ class ResponseLoader:
 
         for url, response_info in zip(urls, responses):
             if isinstance(response_info, Exception):
-                cls._logger.error(f"Responses Error: {response_info}")
+                cls._logger.error(f"Responses Error: {response_info.__class__}")
                 continue
             yield url, response_info
 
@@ -303,7 +325,7 @@ class ResponseLoader:
     def _log_response(cls, response: ScrapedResponse) -> None:
         message = f"URL={response.url}, Status={response.status_code}"
 
-        if response.status_code == cls._BAD_RESPONSE_CODE:
+        if response.status_code != 200:
             cls._logger.warning(f"Bad Response Received: {message}")
         else:
             cls._logger.info(f"Good Response Received: {message}")

@@ -35,6 +35,7 @@ class Crawler:
                  loop: asyncio.AbstractEventLoop = None,
                  ignore_robots_txt: bool = False,
                  render_pages: bool = False,
+                 use_proxies: bool = False,
                  url_patters: List[str] = None,
                  user_agent: str = "*"):
 
@@ -43,6 +44,7 @@ class Crawler:
         self.max_depth = max_depth
         self.ignore_robots_txt = ignore_robots_txt
         self.render_pages = render_pages
+        self.use_proxies = use_proxies
         self.crawl_delay = crawl_delay
         self.user_agent = user_agent
         self.url_patterns = url_patters
@@ -137,7 +139,8 @@ class Crawler:
 
             response_pairs = await ResponseLoader.load_responses(
                 urls_to_get_responses_from,
-                render_pages=self.render_pages
+                render_pages=self.render_pages,
+                use_proxies=self.use_proxies
             )
 
             # if there's no crawl delay that means we sent all the urls to vist to be

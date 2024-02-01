@@ -6,3 +6,4 @@ aiofiles~=23.2.1
 EVNTDispatch~=0.0.2
 requests~=2.28.2
 aiofiles
+httpx~=0.24.1

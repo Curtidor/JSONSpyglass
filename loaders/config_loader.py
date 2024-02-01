@@ -39,7 +39,6 @@ class ConfigLoader:
         self._build_target_url_table()
         self.format_config()
 
-
         self._logger = CLogger("ConfigLoafer", logging.INFO, {logging.StreamHandler(): logging.INFO})
 
     def load_config(self) -> dict:
@@ -93,17 +92,21 @@ class ConfigLoader:
                                       self.config_data.get('target_urls')]
         # for every target_url there's an url, so we can safely use the index from crawler_options_collection to
         # index the seeds list as they are in the same order and of the same length
-        for index, crawler_options_raw_data in enumerate(crawler_options_collection):
+        for url, crawler_options_raw_data in zip(seeds, crawler_options_collection):
             # a flag to indicate if the crawler needs to render each url
-            render_pages = self._target_url_table.get(seeds[index], {}).get('render_pages', False)
+            render_pages = self._target_url_table.get(url, {}).get('render_pages', False)
+            # a flag to indicate if the crawler should use proxies
+            use_proxies = self._target_url_table.get(url, {}).get('use_proxies', False)
+
             if crawler_options_raw_data == NO_CRAWLER_FOUND:
                 # create a default crawler if one was not specified
-                crawler = Crawler(seeds[index], [ResponseLoader.get_domain(seeds[index])],
-                                  render_pages=render_pages)
+                crawler = Crawler(url, [ResponseLoader.get_domain(url)],
+                                  render_pages=render_pages, use_proxies=use_proxies)
             # else a crawler was specified, and we will use that data to initialize the crawler
             else:
-                crawler = Crawler(seeds[index], [], render_pages=render_pages)
+                crawler = Crawler(url, [], render_pages=render_pages, use_proxies=use_proxies)
                 Deserializer.deserialize(crawler, crawler_options_raw_data)
+
             yield crawler
 
     def only_scrape_sub_pages(self, url: str) -> bool:
@@ -218,8 +221,9 @@ class ConfigLoader:
         """
         for url_data in self.config_data.get('target_urls', []):
             url = url_data.get('url')
-            options = url_data.get('options', {})
-            self._target_url_table.update({url: self._build_options(url, options)})
+            options = self._build_options(url, url_data.get('options', {}))
+
+            self._target_url_table.update({url: options})
 
     def _build_options(self, url: str, options: Dict) -> Dict[str, bool]:
         """
@@ -232,7 +236,7 @@ class ConfigLoader:
         Returns:
             Dict[str, bool]: Built options.
         """
-        DEFAULT_OPTIONS = {'only_scrape_sub_pages': True, 'render_pages': False}
+        DEFAULT_OPTIONS = {'only_scrape_sub_pages': True, 'render_pages': False, 'use_proxies': False}
         for option in DEFAULT_OPTIONS:
             if options.get(option) is None:
                 self._logger.warning(
