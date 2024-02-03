@@ -3,6 +3,8 @@ import logging
 
 from typing import Dict, List, Any, Tuple, Generator
 
+from EVNTDispatch import EventDispatcher
+
 from loaders.response_loader import ResponseLoader
 from scraping.crawler import Crawler
 from utils.clogger import CLogger
@@ -21,7 +23,7 @@ class ConfigLoader:
         config_data (dict): The loaded configuration data.
         _total_elements (int): Total number of elements.
         _element_names (set): Set of element names.
-        _target_url_table (dict): Table of target URLs and their options.
+        _options_url_table (dict): Table of target URLs and their options.
         _parsing_options_cache (dict): Cache for data parsing options.
     """
 
@@ -33,13 +35,17 @@ class ConfigLoader:
         self._total_elements = 0
         self._element_names = set()
 
-        self._target_url_table = {}
+        # dict[url, options_data]
+        self._options_url_table = {}
+        # dict[url, response_loader_data]
+        self._response_loader_table = {}
+        self._crawler_table = {}
         self._parsing_options_cache = {}
 
-        self._build_target_url_table()
-        self.format_config()
-
         self._logger = CLogger("ConfigLoafer", logging.INFO, {logging.StreamHandler(): logging.INFO})
+
+        self._build_tables()
+        self._format_config()
 
     def load_config(self) -> dict:
         """
@@ -76,38 +82,33 @@ class ConfigLoader:
 
         return urls
 
-    def get_crawlers(self) -> Generator[Crawler, Any, Any]:
+    def get_crawlers(self, dispatcher: EventDispatcher) -> Generator[Crawler, Any, Any]:
         """
         Generate Crawler instances based on configuration data.
 
         Yields:
             Crawler: A Crawler instance.
         """
-        NO_CRAWLER_FOUND = 'no_crawler_found'
-
         seeds = self.get_target_urls()
-        # loop over all the target urls and try and get the crawler settings related to the url
-        # the crawler_options_collection is a list of the json data for each crawler in the config file
-        crawler_options_collection = [crawler_data.get('crawler', NO_CRAWLER_FOUND) for crawler_data in
-                                      self.config_data.get('target_urls')]
-        # for every target_url there's an url, so we can safely use the index from crawler_options_collection to
-        # index the seeds list as they are in the same order and of the same length
-        for url, crawler_options_raw_data in zip(seeds, crawler_options_collection):
-            # a flag to indicate if the crawler needs to render each url
-            render_pages = self._target_url_table.get(url, {}).get('render_pages', False)
-            # a flag to indicate if the crawler should use proxies
-            use_proxies = self._target_url_table.get(url, {}).get('use_proxies', False)
 
-            if crawler_options_raw_data == NO_CRAWLER_FOUND:
-                # create a default crawler if one was not specified
-                crawler = Crawler(url, [ResponseLoader.get_domain(url)],
-                                  render_pages=render_pages, use_proxies=use_proxies)
-            # else a crawler was specified, and we will use that data to initialize the crawler
-            else:
-                crawler = Crawler(url, [], render_pages=render_pages, use_proxies=use_proxies)
-                Deserializer.deserialize(crawler, crawler_options_raw_data)
+        crawler_options_collection = [self._crawler_table[url] for url in self._crawler_table]
+
+        for url, crawler_options_raw_data, response_loader in zip(seeds, crawler_options_collection, self._get_response_loaders(dispatcher)):
+            crawler = Crawler(url, [], response_loader)
+            Deserializer.deserialize(crawler, crawler_options_raw_data)
 
             yield crawler
+
+    def _get_response_loaders(self, dispatcher: EventDispatcher) -> Generator[ResponseLoader, None, None]:
+        seeds = self.get_target_urls()
+
+        response_loader_collection = [self._response_loader_table[url] for url in self._response_loader_table]
+
+        for urls, response_loader_data in zip(seeds, response_loader_collection):
+            response_loader = ResponseLoader(dispatcher, False, False, 0, 0)
+            Deserializer.deserialize(response_loader, response_loader_data)
+
+            yield response_loader
 
     def only_scrape_sub_pages(self, url: str) -> bool:
         """
@@ -119,8 +120,7 @@ class ConfigLoader:
         Returns:
             bool: True if only sub-pages are to be scraped, False otherwise.
         """
-        if self._target_url_table:
-            return self._target_url_table.get(url, {}).get('only_scrape_sub_pages', False)
+        return self._options_url_table.get(url, {}).get('only_scrape_sub_pages', False)
 
     def get_raw_target_elements(self) -> Generator[Tuple[str, Dict[Any, Any]], None, None]:
         """
@@ -204,7 +204,7 @@ class ConfigLoader:
                 raise ValueError(f"Unknown name in data-order: {item}")
         return unique_data_order
 
-    def format_config(self) -> None:
+    def _format_config(self) -> None:
         """
         Format the configuration data by setting defaults and IDs for elements.
         """
@@ -215,32 +215,41 @@ class ConfigLoader:
                 element["name"] = f"element {index}"
             self._element_names.add(element_name)
 
-    def _build_target_url_table(self) -> None:
+    def _build_tables(self) -> None:
         """
-        Build the target URL table using configuration data.
+        Build the options and response_loader table using configuration data.
         """
         for url_data in self.config_data.get('target_urls', []):
             url = url_data.get('url')
-            options = self._build_options(url, url_data.get('options', {}))
 
-            self._target_url_table.update({url: options})
+            options_data = url_data.get('options', {})
+            response_data = url_data.get('response_loader', {})
+            crawler_data = url_data.get('crawler', {})
 
-    def _build_options(self, url: str, options: Dict) -> Dict[str, bool]:
+            options_table = self._build_table(url, options_data, {'only_scrape_sub_pages': True})
+            response_loader_table = self._build_table(url, response_data, {'use_proxies': False, 'render_pages': False, 'max_retires': 0})
+            crawler_table = self._build_table(url, crawler_data, {'ignore_robots_txt': False, 'crawl_delay': 0.1, 'max_depth': 6, 'allowed_domains': [ResponseLoader.get_domain(url)]})
+
+            self._options_url_table.update({url: options_table})
+            self._response_loader_table.update({url: response_loader_table})
+            self._crawler_table.update({url: crawler_table})
+
+    def _build_table(self, url: str, user_specified_options: Dict, default_options: Dict) -> Dict[str, bool]:
         """
         Build options for a target URL with default values.
 
         Args:
             url (str): The target URL.
-            options (Dict): User-defined options.
+            user_specified_options (Dict): User-defined options.
 
         Returns:
             Dict[str, bool]: Built options.
         """
-        DEFAULT_OPTIONS = {'only_scrape_sub_pages': True, 'render_pages': False, 'use_proxies': False}
-        for option in DEFAULT_OPTIONS:
-            if options.get(option) is None:
+        for option in default_options:
+            if user_specified_options.get(option) is None:
                 self._logger.warning(
-                    f"missing options argument in target url: {url} missing option: {option}, defaulting to {DEFAULT_OPTIONS[option]}"
+                    f"missing options argument in target url: {url} missing option: {option}, defaulting to {default_options[option]}"
                 )
-                options.update({option: DEFAULT_OPTIONS[option]})
-        return options
+                user_specified_options.update({option: default_options[option]})
+        return user_specified_options
+
