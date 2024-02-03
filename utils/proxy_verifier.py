@@ -9,6 +9,14 @@ from models.proxy import Proxy
 from .clogger import CLogger
 
 
+class NoProxiesFound(BaseException):
+    pass
+
+
+class ProxyServiceDown(BaseException):
+    pass
+
+
 class ProxyVerifier:
     """
     A class to verify the functionality of proxies by testing their connectivity to specified websites.
@@ -17,7 +25,7 @@ class ProxyVerifier:
     _logger = CLogger("ProxyVerifier", logging.INFO, {logging.StreamHandler(): logging.INFO})
 
     @classmethod
-    async def verify_proxies(cls, proxies: Union[Dict[str, str], Set[Proxy]]) -> List[Proxy]:
+    async def verify_proxies(cls, proxies: Union[Dict[str, str], Set[Proxy]], time_to_test: int = 5) -> List[Proxy]:
         """
         Verify the given proxies by testing their connectivity to specified websites.
 
@@ -31,17 +39,19 @@ class ProxyVerifier:
 
         tasks = []
         for proxy in proxies:
-            tasks.append(cls._test_proxy(proxy))
+            tasks.append(cls._test_proxy(proxy, time_to_test))
 
         results = await asyncio.gather(*tasks)
         cls._logger.info("Finished verifying proxies")
-
         cleaned_results = [proxy for proxy in results if proxy]
+
+        if not cleaned_results:
+            raise NoProxiesFound("please restart the application")
 
         return cleaned_results
 
     @classmethod
-    async def _test_proxy(cls, proxy: Proxy) -> Union[Proxy, None]:
+    async def _test_proxy(cls, proxy: Proxy, time_to_test: int = 5) -> Union[Proxy, None]:
         """
         Test the connectivity of the given proxy to specified websites.
 
@@ -56,7 +66,8 @@ class ProxyVerifier:
 
         async with httpx.AsyncClient(proxies=formatted_proxy, verify=False) as client:
             try:
-                response = await client.request("GET", f'{proxy.protocol}://www.google.com')
+                for _ in range(time_to_test):
+                    response = await client.request("GET", f'{proxy.protocol}://www.google.com')
                 cls._logger.info(f'Verified Proxy: {proxy}')
             except httpx.ReadError:
                 return None
@@ -136,6 +147,9 @@ class ProxyVerifier:
 
         async with httpx.AsyncClient() as client:
             response = await client.request("GET", url=url)
+
+            if response.status_code == 500:
+                raise ProxyServiceDown("Proxy service is currently down, try again later or set 'use_proxies' to false")
 
         pattern = re.compile(r'(?P<protocol>https?|socks[45]?)://(?P<ip>[\d.]+):(?P<port>\d+)')
         matches = pattern.finditer(response.text)
