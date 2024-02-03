@@ -7,7 +7,6 @@ from scraping.data_parser import DataParser
 from scraping.data_saver import DataSaver
 from scraping.data_scraper import DataScraper
 from loaders.config_loader import ConfigLoader
-from loaders.response_loader import ResponseLoader
 
 # TODO: (FEATURE) add a feature to scrape multiple of the same element
 
@@ -31,15 +30,11 @@ async def load_and_scrape_data(config_path: str) -> None:
     DataScraper(config, elements, event_dispatcher)
     DataParser(config, event_dispatcher, data_saver)
 
-    crawlers = [crawler for crawler in config.get_crawlers()]
-    use_proxies = any([crawler for crawler in crawlers if crawler.use_proxies])
-
-    # Set up the ResponseLoader
-    await ResponseLoader.setup(event_dispatcher=event_dispatcher, use_proxies=use_proxies)
+    crawlers = [crawler for crawler in config.get_crawlers(event_dispatcher)]
 
     # Start and wait for crawlers to finish
     for crawler in crawlers:
-        crawler.start()
+        await crawler.start()
         await crawler.exit()
 
     await event_dispatcher.close()
