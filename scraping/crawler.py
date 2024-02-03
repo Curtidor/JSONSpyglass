@@ -30,12 +30,13 @@ class Crawler:
     def __init__(self,
                  seed: str,
                  allowed_domains: List[str],
+                 response_loader: ResponseLoader,
                  max_depth: int = 6,
                  crawl_delay: float = 1,
                  loop: asyncio.AbstractEventLoop = None,
                  ignore_robots_txt: bool = False,
                  render_pages: bool = False,
-                 use_proxies: bool = False,
+                 only_scrape_sub_pages: bool = False,
                  url_patters: List[str] = None,
                  user_agent: str = "*"):
 
@@ -44,7 +45,7 @@ class Crawler:
         self.max_depth = max_depth
         self.ignore_robots_txt = ignore_robots_txt
         self.render_pages = render_pages
-        self.use_proxies = use_proxies
+        self.only_scrape_sub_pages = only_scrape_sub_pages
         self.crawl_delay = crawl_delay
         self.user_agent = user_agent
         self.url_patterns = url_patters
@@ -68,6 +69,7 @@ class Crawler:
         self._set_event_loop(loop=loop)
 
         self._logger = CLogger("Crawler", logging.INFO, {logging.StreamHandler(): logging.INFO})
+        self._response_loader = response_loader
 
     @property
     def has_crawl_delay(self) -> bool:
@@ -79,10 +81,15 @@ class Crawler:
         """
         return self.crawl_delay > 0
 
-    def start(self):
+    async def start(self):
         """
         Start the crawling process.
         """
+        if self._running_tasks:
+            return
+
+        await self._response_loader.setup()
+
         if not self.ignore_robots_txt:
             crawl_delay = self._robot_parser.crawl_delay(self.user_agent)
             # if the robot.txt file specifies a crawl delay use it else use the one specified by the user
@@ -137,11 +144,7 @@ class Crawler:
             # populate structure with all the urls to get responses from
             urls_to_get_responses_from = {self._to_visit.pop()} if self.has_crawl_delay else self._to_visit
 
-            response_pairs = await ResponseLoader.load_responses(
-                urls_to_get_responses_from,
-                render_pages=self.render_pages,
-                use_proxies=self.use_proxies
-            )
+            response_pairs = await self._response_loader.load_responses(urls=urls_to_get_responses_from)
 
             # if there's no crawl delay that means we sent all the urls to vist to be
             # processed, so we can clear the set
