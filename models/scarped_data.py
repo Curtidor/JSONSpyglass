@@ -11,6 +11,10 @@ class ScrapedData:
     nodes: List[Node]
     target_element_id: int
 
+    @property
+    def has_data(self) -> bool:
+        return len(self.nodes) > 0
+
     def get_nodes(self) -> Generator[Node, None, None]:
         for node in self.nodes:
             yield node
