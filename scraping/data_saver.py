@@ -6,8 +6,6 @@ from typing import Dict, Any, List
 
 from utils.clogger import CLogger
 
-# TODO: (BUG) when the crawler has no sleep the data saves in the wrong order
-
 
 class DataSaver:
     """
@@ -112,7 +110,6 @@ class DataSaver:
                 item.extend(data[index::len(ordered_data)])
 
             async with aiofiles.open(csv_file_path, mode='a', newline='') as csv_file:
-
                 if orientation == 'horizontal':
                     # Write the rows as-is
                     await csv_file.writelines([','.join(row) + '\n' for row in ordered_data])
