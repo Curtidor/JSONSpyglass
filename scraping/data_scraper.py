@@ -1,7 +1,8 @@
 from typing import List, Dict
-from selectolax.parser import HTMLParser
 
+from selectolax.parser import HTMLParser
 from EVNTDispatch import EventDispatcher, PEvent, EventType
+
 from loaders.config_loader import ConfigLoader
 from models.scarped_data import ScrapedData
 from models.target_element import TargetElement
@@ -46,16 +47,13 @@ class DataScraper:
     def _process_response(self, url: str, content: str) -> List[ScrapedData]:
         results = []
 
-        parser = HTMLParser(content)
-
-        if self.config.only_scrape_sub_pages(url):
+        if self.config.skip_initial_url(url):
             return results
 
-        for element in self.elements:
-            scraped_data = self.collect_all_target_elements(url, element, parser)
+        parser = HTMLParser(content)
 
-            if scraped_data.nodes:
-                results.append(scraped_data)
+        results = [scraped_data for element in self.elements
+                   if (scraped_data := self.collect_all_target_elements(url, element, parser)).has_data]
 
         return results
 
@@ -73,17 +71,16 @@ class DataScraper:
             ScrapedData: An instance containing the collected data.
         """
         result_set = parser.css(
-            target_element.search_hierarchy[0]) if target_element.search_hierarchy else []
+            target_element.search_hierarchy[0]
+        ) if target_element.search_hierarchy else []
 
+        # if the search_hierarchy has 1 or less layer's no further filtering
+        # is required and the result set can be returned
         if len(target_element.search_hierarchy) <= 1:
             return ScrapedData(url, result_set, target_element.element_id)
 
+        # else further filter the initial result set
         for attr in target_element.search_hierarchy[1:]:
-            new_result_set = []
-            for tag in result_set:
-                temp_result_set = tag.css(attr)
-                if temp_result_set:
-                    new_result_set.extend(temp_result_set)
-            result_set = new_result_set
+            result_set = [item for tag in result_set for item in tag.css(attr) if item]
 
         return ScrapedData(url, result_set, target_element.element_id)
