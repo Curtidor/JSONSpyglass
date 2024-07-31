@@ -6,9 +6,10 @@ from typing import List, Any, Generator, Iterable, Set, Dict
 from urllib.robotparser import RobotFileParser
 from playwright.async_api import Locator
 
-from loaders.response_loader import ResponseLoader, ScrapedResponse
 from utils.clogger import CLogger
 from .page_manager import BrowserManager
+from loaders.response_loader.response_loader import ResponseLoader
+from loaders.response_loader.response_loader_models import ScrapedResponse
 
 # TODO (SPEED AND EFFICIENCY IMPROVEMENT) Need work on page management pages are closed to soon
 
@@ -55,7 +56,6 @@ class Crawler:
         self._to_visit = set()
         self._visited = set()
         self._clicked_elements = set()
-        self._running_tasks = set()
 
         self._response_with_href_elements: Set[ScrapedResponse] = set()
         self._processed_href_locators: Set[Locator] = set()
@@ -81,12 +81,10 @@ class Crawler:
         """
         return self.crawl_delay > 0
 
-    async def start(self):
+    async def run(self):
         """
         Start the crawling process.
         """
-        if self._running_tasks:
-            return
 
         await self._response_loader.setup()
 
@@ -98,14 +96,12 @@ class Crawler:
         # add the initial link to the to-vist set
         self._to_visit.add(self.seed)
 
-        task = self._loop.create_task(self._run())
-        self._running_tasks.add(task)
+        await self._run()
 
     async def exit(self) -> None:
         """
         Waits for all crawling task to finish and print summary statistics on exit.
         """
-        await asyncio.gather(*self._running_tasks)
         await BrowserManager.close()
 
         print("TOTAL SITES VISITED:", len(self._visited))
@@ -129,6 +125,7 @@ class Crawler:
                 child_url = ResponseLoader.build_link(base_url, href)
                 if child_url not in self._visited and self._is_url_allowed(child_url):
                     yield child_url
+
                 self._visited.add(child_url)
 
     async def _run(self):
@@ -153,7 +150,6 @@ class Crawler:
             else:
                 await asyncio.sleep(self.crawl_delay)
 
-            # Process responses
             await self._process_responses(response_pairs)
 
             new_urls.update(
@@ -240,7 +236,7 @@ class Crawler:
             try:
                 self._loop = asyncio.get_running_loop()
             except RuntimeError:
-                self._loop = asyncio.new_event_loop()
+                self._loop = asyncio.get_event_loop_policy().new_event_loop()
                 asyncio.set_event_loop(self._loop)
         else:
             self._loop = loop

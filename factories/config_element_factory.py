@@ -1,57 +1,67 @@
-from typing import Generator, List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Iterable
 
 from models.target_element import TargetElement
+from models.requires import Requires
+
+ELEMENT_TARGET = 'target'
+INVALID_ID = 'invalid_id'
+NO_REF_ELEMENT = 'no_ref_element'
 
 
 class ConfigElementFactory:
-    ELEMENT_TARGET = 'target'
-    INVALID_ID = 'invalid_id'
-    NO_REF_ELEMENT = 'no_ref_element'
 
-    @staticmethod
-    def create_elements(generator: Generator[Tuple[str, Dict[Any, Any]], None, None], data_order: List[str]) \
-            -> List[TargetElement]:
+    @classmethod
+    def create_elements(cls, element_iter: Iterable[Tuple[str, Dict[Any, Any]]], data_order: List[str]) \
+            -> tuple[list[TargetElement], Requires]:
         """
         Creates elements based on the provided generator and sorts them according to the data order.
 
-        :param generator: A generator yielding element type and data.
+        :param element_iter: An iterable yielding element type and data.
         :param data_order: The order elements should be in.
 
-        :return: List[TargetElement]: List containing created and sorted elements.
+        :return: Tuple[List[TargetElement], Requires]: List containing created and sorted elements.
         """
-        elements = ConfigElementFactory._create_elements(generator)
-        ConfigElementFactory._sort_elements(elements, data_order)
+        elements, requires = cls._create_elements(element_iter)
+        cls._sort_elements(elements, data_order)
 
-        return elements
+        unique_requires = Requires()
+        unique_requires.merge_requires(*requires)
 
-    @staticmethod
-    def _create_elements(generator: Generator[Tuple[str, Dict[str, str]], None, None]) \
-            -> List[TargetElement]:
+        return elements, unique_requires
+
+    @classmethod
+    def _create_elements(cls, element_iter: Iterable[Tuple[str, Dict[Any, Any]]]) \
+            -> Tuple[List[TargetElement], List[Requires]]:
         """
         Create and return a list of elements based on the provided generator.
 
-        :param generator: A generator yielding element type and data.
+        :param element_iter: An iterable yielding element type and data.
 
         :return: List[TargetElement]: List of created elements.
         """
         elements = []
+        requirements = []
 
-        for element_type, element_data in generator:
-            element_id = element_data.get('id', ConfigElementFactory.INVALID_ID)
-            element_name = element_data.get('name', ConfigElementFactory.NO_REF_ELEMENT)
+        for element_type, element_data in element_iter:
+            element_id = element_data.get('id', INVALID_ID)
+            element_name = element_data.get('name', NO_REF_ELEMENT)
 
-            if element_id == ConfigElementFactory.INVALID_ID:
+            if element_id == INVALID_ID:
                 raise ValueError(f"Invalid element id: {element_data}")
 
-            if element_type == ConfigElementFactory.ELEMENT_TARGET:
-                elements.append(ConfigElementFactory._create_target(element_name, element_id, element_data))
+            if element_type == ELEMENT_TARGET:
+                elements.append(cls._create_target(element_name, int(element_id), element_data))
             else:
                 raise ValueError(
                     f"Invalid element type: {element_type}, possibly missing either a css selector, "
                     f"a search hierarchy, or tags and attributes"
                 )
 
-        return elements
+            element_requirements = element_data.get('requires', {})
+
+            requirements.append(Requires().build_requires(element_requirements))
+
+        return elements, requirements
 
     @staticmethod
     def _create_target(element_name: str, element_id: int, element_data: Dict[Any, Any]) -> TargetElement:
