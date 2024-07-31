@@ -21,6 +21,13 @@
   "elements": [
     {
       "name": "Book Price",
+      "requires": {
+        "loaded": [
+          {"css_selector": ".some_selector"}
+        ],
+        "event": ["some_cool_event"],
+        "state": ["load", "networkidle"]
+      },
       "css_selector": ".product_main p.price_color",
       "data_parsing": {
         "collect_text": true
