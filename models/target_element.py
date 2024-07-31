@@ -1,5 +1,5 @@
-from typing import List, Dict, Generator
 from dataclasses import dataclass
+from typing import List, Dict, Generator
 
 
 @dataclass
@@ -26,7 +26,8 @@ class TargetElement:
         for the same attribute name into space-separated strings within the returned dictionary.
 
         Note:
-        The 'attributes' parameter should be a list of dictionaries, where each dictionary contains 'name' and 'value' keys.
+        The 'attributes' parameter should be a list of dictionaries, where each dictionary contains 'name'
+        and 'value' keys.
 
         Example:
         attributes = [
@@ -50,10 +51,7 @@ class TargetElement:
                 else:
                     raise ValueError(f"Improperly formatted attributes, missing value or name: {attribute}")
 
-            if name in attr:
-                attr[name].append(value)
-            else:
-                attr[name] = [value]
+            attr.setdefault(name, []).append(value)
 
         return {k: ' '.join(v) for k, v in attr.items()}
 
@@ -63,7 +61,7 @@ class TargetElement:
         Format a list of attribute dictionaries into a list of CSS selectors.
 
         Args:
-            attr_collection (List[Dict[str, str]): List of attribute dictionaries, where each dictionary
+            attr_collection (List[Dict[str, str]]): List of attribute dictionaries, where each dictionary
                 contains 'name' and 'value' keys for attribute names and values.
 
         Returns:
@@ -96,7 +94,7 @@ class TargetElement:
             Create a search hierarchy by processing a raw hierarchy of HTML attributes.
 
             Args:
-                raw_hierarchy (List[Dict[str, str]): A list of dictionaries representing raw HTML attributes.
+                raw_hierarchy (List[Dict[str, str]]): A list of dictionaries representing raw HTML attributes.
 
             Returns:
                 List[str]: A list of CSS selectors generated from the processed raw HTML attributes.
@@ -119,7 +117,7 @@ class TargetElement:
         search_hierarchy = []
         for formatted_attr in raw_formatted_hierarchy:
             # check if it's already a css selector
-            p_css_selector = formatted_attr.get('css_selector', '')
+            p_css_selector = formatted_attr.get('css_selector', None)
             if p_css_selector:
                 search_hierarchy.append(p_css_selector)
                 continue
@@ -158,15 +156,15 @@ class TargetElement:
         """
         CLASS_ATTR = 'class'
 
-        for attr_name, values in formatted_attributes.items():
-            if not values:
+        for attr_name, value in formatted_attributes.items():
+            if not value:
                 raise ValueError(f"improperly formatted attribute, value: {formatted_attributes} {attr_name}")
 
             if attr_name == 'css_selector':
-                css_selector = values
+                css_selector = value
             else:
-                css_selector = f".{'.'.join(values.split())}" if attr_name == CLASS_ATTR \
-                    else f"[{attr_name}={values}]"
+                css_selector = f".{'.'.join(value.split())}" if attr_name == CLASS_ATTR \
+                    else f"[{attr_name}={value}]"
 
             yield css_selector
 
