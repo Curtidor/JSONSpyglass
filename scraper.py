@@ -18,23 +18,26 @@ async def load_and_scrape_data(config_path: str) -> None:
 
     # Load the configuration
     config = ConfigLoader(config_path)
+    data_order = config.get_data_order()
 
     # Create elements from the configuration
-    elements = ConfigElementFactory.create_elements(config.get_raw_target_elements(), config.get_data_order())
+    elements, requirements = ConfigElementFactory.create_elements(
+        config.get_raw_target_elements(), data_order
+    )
 
     # Configure and set up the data saver
-    data_saver = DataSaver(config.get_saving_data(), config.get_data_order())
+    data_saver = DataSaver(config.get_saving_data(), data_order)
     await data_saver.setup(clear=True)
 
     # Initialize data scraper and parser
     DataScraper(config, elements, event_dispatcher)
     DataParser(config, event_dispatcher, data_saver)
 
-    crawlers = [crawler for crawler in config.get_crawlers(event_dispatcher)]
+    crawlers = [crawler for crawler in config.get_crawlers(requirements, event_dispatcher)]
 
     # Start and wait for crawlers to finish
     for crawler in crawlers:
-        await crawler.start()
+        await crawler.run()
         await crawler.exit()
 
     await event_dispatcher.close()
