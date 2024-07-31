@@ -1,0 +1,30 @@
+{
+  "target_urls": [
+    {
+      "options": {},
+      "crawler": {},
+      "response_loader": {}
+    }
+  ],
+  "elements": [
+    {
+      "name": "Book Price"
+    },
+    {
+      "name": "Book Name"
+    },
+    {
+      "name": "Stock"
+    },
+    {
+      "name": "Not in data order"
+    }
+    ,
+    {
+
+    }
+  ],
+  "data_saving": {
+  },
+  "data_order": ["Stock","Book Name", "Book Price", "bad name"]
+}
